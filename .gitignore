@@ -1,0 +1,12 @@
+# 1) Ignore absolutely everything
+/*
+
+# 2) But do not ignore the .gitignore itself
+!.gitignore
+
+# 3) Un-ignore (whitelist) your script files or script folders.
+#    Adjust these patterns to fit your filenames/extensions:
+
+# Or, if they’re loose .py files in the root:
+!*.py
+!*.txt
