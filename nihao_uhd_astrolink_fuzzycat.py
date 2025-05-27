@@ -669,7 +669,9 @@ def star_cluster_analysis(snapshot_file_paths, working_directory_path, axisLimit
         fuzzy_cluster_snapshot_ranges[cluster_idx] = [min(snapshot_indices), max(snapshot_indices)]
 
         
-    burst_clusters = fast_identify_burst_clusters(snapshot_file_paths, working_directory_path, analysis_dir, star_ages_dir, fuzzy_cluster_snapshot_ranges)
+    fast_identify_burst_clusters(snapshot_file_paths, working_directory_path, analysis_dir, star_ages_dir, fuzzy_cluster_snapshot_ranges)
+    burst_clusters = pd.read_csv(f"{analysis_dir}cluster_formation_metrics.csv").set_index('cluster_idx').to_dict(orient='index')
+    print(f"Found {len(burst_clusters)} burst clusters out of {len(fuzzy_clusters)} total clusters")
 
     for cluster_idx in burst_clusters:
         cluster_dir = f"{plots_dir}cluster_{cluster_idx}/"
@@ -830,17 +832,52 @@ def fast_identify_burst_clusters(snapshot_file_paths, working_directory_path, an
 
     print("Finding potential star forming clusters...")
 
-    burst_clusters = {}
+    csv_filepath = os.path.join(analysis_path, "cluster_formation_metrics.csv")
+    header_columns = ['cluster_idx', 'star_count', 'age_range', 't25_t75']
+    processed_cluster_ids = set()
+    file_exists = os.path.exists(csv_filepath)
+
+    if file_exists:
+        try:
+            df_existing = pd.read_csv(csv_filepath)
+            if not df_existing.empty and 'cluster_idx' in df_existing.columns:
+                processed_cluster_ids = set(df_existing['cluster_idx'].astype(int).unique())
+                print(f"Resuming. Found {len(processed_cluster_ids)} already processed cluster(s) in {csv_filepath}")
+            elif df_existing.empty:
+                print(f"File {csv_filepath} exists but is empty.")
+            else: # Not empty, but missing 'cluster_idx'
+                print(f"Warning: File {csv_filepath} exists but is missing 'cluster_idx'. Accurate resume not guaranteed.")
+        except pd.errors.EmptyDataError:
+            # This is expected if the file was created with a header but no data yet, or if it's just an empty file.
+            print(f"File {csv_filepath} exists but is empty (or unreadable as CSV).")
+        except Exception as e:
+            # For other errors (e.g., malformed CSV), we might not be able to get processed_cluster_ids.
+            # The script will then re-process items, potentially leading to duplicates if the file is not empty.
+            print(f"Warning: Could not reliably read {csv_filepath} to check for processed clusters: {e}. May re-process items.")
+    needs_header = not file_exists or (file_exists and os.path.getsize(csv_filepath) == 0)
+
+    if needs_header:
+        pd.DataFrame(columns=header_columns).to_csv(csv_filepath, index=False)
+        print(f"Header written to {csv_filepath}")
 
     for cluster_idx, (start_idx, end_idx) in enumerate(fuzzy_clusters):
-
+        
         print(f"Analyzing cluster {cluster_idx}/{len(fuzzy_clusters)}")
+        continue
+        if cluster_idx in processed_cluster_ids:
+            print(f"Cluster {cluster_idx} already processed and in CSV. Skipping.")
+            continue
         cluster_start_snapshot = fuzzy_cluster_threshold_ranges[cluster_idx][0]
         cluster_end_snapshot = fuzzy_cluster_threshold_ranges[cluster_idx][1]
+
+        burst_recorded_for_this_cluster_idx_this_run = False
 
         for snap_idx in range(cluster_start_snapshot - 4, cluster_start_snapshot + 1):
             if snap_idx < 0 or snap_idx >= len(snapshot_file_paths):
                 continue
+            if burst_recorded_for_this_cluster_idx_this_run:
+            # If we found and recorded a burst for this cluster_idx in the current run, we stop checking further snapshots for this cluster_idx.
+                break
             snapshot_path = snapshot_file_paths[snap_idx]
             print(f"Processing snapshot {snap_idx}/{len(snapshot_file_paths)}")
             star_data = np.load(f"{star_ages_dir}star_ages_{snap_idx:03d}.npy")
@@ -893,15 +930,12 @@ def fast_identify_burst_clusters(snapshot_file_paths, working_directory_path, an
                 't25_t75': t25_t75
             }
 
-            if t25_t75 < threshold_fraction and burst_clusters.get(cluster_idx) is None:
-                burst_clusters[cluster_idx] = metrics
+            if t25_t75 < threshold_fraction:
+                df_row = pd.DataFrame([metrics])
+                df_row.to_csv(csv_filepath, mode='a', header=False, index=False)
+                burst_recorded_for_this_cluster_idx_this_run = True
 
-    # Save all metrics for further analysis
-    df = pd.DataFrame(burst_clusters.values())
-    df.to_csv(f"{analysis_path}cluster_formation_metrics_3.csv", index=False)
-    
-    print(f"Found {len(burst_clusters)} burst clusters out of {len(fuzzy_clusters)} total clusters")
-    return burst_clusters
+
 
 def make_movie_of_fuzzy_star_forming_clusters(burst_clusters, analysis_dir, workingDirectoryPath, snapshotFilePaths, axisLimits, frameRate):
     #make a movie like in the makemovieoffuzzycatclusters function, but only for the best burst clusters
@@ -980,7 +1014,11 @@ def make_movie_of_fuzzy_star_forming_clusters(burst_clusters, analysis_dir, work
 def save_star_ages(snapshot_file_paths, working_directory_path):
     
     analysis_dir = f"{working_directory_path}star_cluster_analysis/"
+    if not os.path.exists(analysis_dir):
+        os.makedirs(analysis_dir)
     star_ages_dir = f"{analysis_dir}star_ages/"
+    if not os.path.exists(star_ages_dir):
+        os.makedirs(star_ages_dir)
 
     n_snapshots = len(snapshot_file_paths)
 
@@ -1046,6 +1084,7 @@ if __name__ == "__main__":
 
     import numpy as np
     import pynbody as pb
+    import pandas as pd
     import matplotlib.pyplot as plt
     import matplotlib.colors as col
     import ffmpeg
@@ -1077,7 +1116,7 @@ if __name__ == "__main__":
 
     # Set up the working directory
     galaxyFolderName = '2.79e12_zoom_6_rerun'
-    workingDirectoryPath = f"/mnt/storage/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_S={significance}_without_window/"
+    workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_S={significance}_without_window/"
     #workingDirectoryPath = f"/mnt/storage/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_last_100_snapshots_S_5/"
 
     if not os.path.exists(workingDirectoryPath):
@@ -1098,7 +1137,7 @@ if __name__ == "__main__":
     logging.info(f"Parameters: minLongevityOfFuzzyClusters={minLongevityOfFuzzyClusters}, ageOfTheUniverse={ageOfTheUniverse}, axisLimits={axisLimits}")
     
     # Get the simulation snapshot file paths
-    simulationDirectoryPath = f"/mnt/storage/_data/nihao/nihao_uhd/{galaxyFolderName}/"
+    simulationDirectoryPath = f"/home/_data/nihao/nihao_uhd/{galaxyFolderName}/"
     snapshotFilePrefix = '2.79e12.'
     if(snapshots == 'all'):
         snapshotNumberRange = range(1800, 2001)
@@ -1168,5 +1207,9 @@ if __name__ == "__main__":
     #logging.info("Finished plotting")
 
     #plotTemperatureCuts(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate)
-    save_star_ages(snapshotFilePaths, workingDirectoryPath)
+    #logging.info("Saving star ages for analysis...")
+    #save_star_ages(snapshotFilePaths, workingDirectoryPath)
+
+    logging.info("Starting star cluster analysis...")
     star_cluster_analysis(snapshotFilePaths, workingDirectoryPath, axisLimits, frameRate)
+    logging.info("Finished star cluster analysis")
