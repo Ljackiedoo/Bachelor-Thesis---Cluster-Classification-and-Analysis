@@ -23,7 +23,7 @@ def loadGalaxyAsArrays(snapshotFilePath, particleName, tagging):
     """
     # Feature space names for the particles
     featureSpaceNames = ['pos', 'vel']
-    chemical_abundances = ['metals', 'FeMassFrac', 'OxMassFrac']
+    chemical_abundances = ['FeMassFrac', 'OxMassFrac']
 
     # Load the simulation snapshot
     simulation = pb.load(snapshotFilePath)
@@ -44,15 +44,19 @@ def loadGalaxyAsArrays(snapshotFilePath, particleName, tagging):
         darkMatterWeights = np.array(mainHalo.dm['mass'])
         return darkMatter, darkMatterIDs, darkMatterWeights, simulation
     if particleName == 'stars':
+        # Dynamical features (pos + vel)
+        dyn_features = np.column_stack([mainHalo.stars[feature] for feature in featureSpaceNames])
+        dyn_features -= centre  # Centre only dynamics
         if tagging == 'chemical':
-            featureSpaceNames = chemical_abundances
+            featureSpace = np.column_stack([mainHalo.stars[feature] for feature in chemical_abundances])
         elif tagging == 'chemodynamical':
-            featureSpaceNames.extend(chemical_abundances)
-        stars = np.column_stack([mainHalo.stars[feature] for feature in featureSpaceNames])
-        stars -= centre
+            chem_features = np.column_stack([mainHalo.stars[feature] for feature in chemical_abundances])
+            featureSpace = np.hstack([dyn_features, chem_features])
+        else:
+            featureSpace = dyn_features  # Just dynamics
         starsIDs = mainHalo.stars['iord']
         starMasses = np.array(mainHalo.stars['mass'])
-        return stars, starsIDs, starMasses, simulation
+        return featureSpace, starsIDs, starMasses, simulation
     if particleName == 'gas':
         gas = np.column_stack([mainHalo.gas[feature] for feature in featureSpaceNames])
         gas -= centre
@@ -183,7 +187,7 @@ def runFuzzyCatOnClustersFromSnapshots(workingDirectoryPath, nSamples, minStabil
     del clusteredIDs
 
     # Run FuzzyCat
-    fc = FuzzyCat(nSamples, nPoints, workingDirectoryPath, minStability = minStability, checkpoint = True, verbose = 2, windowSize = fuzzycat_window)
+    fc = FuzzyCat(nSamples, nPoints, workingDirectoryPath, minStability = minStability, checkpoint = True, verbose = 2)
     fc.run()
 
     # Plot the basic results
@@ -1141,7 +1145,7 @@ if __name__ == "__main__":
     plot_labels = False
 
     # Choice of tagging from ['dynamical' (standard), 'chemical', 'chemodynamical']
-    tagging = 'dynamical'
+    tagging = 'chemodynamical'
 
     # The minimum life-span of fuzzy clusters in Mega-years
     minLongevityOfFuzzyClusters = 230 
@@ -1155,8 +1159,8 @@ if __name__ == "__main__":
     # Set up the working directory
     galaxyFolderName = '2.79e12_zoom_6_rerun'
     #workingDirectoryPath = f"/mnt/storage/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_last_100_snapshots_S_5/"
-    #workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_{tagging}_tagging_S={significance}/"
-    workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_S={significance}_without_window/"
+    workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_{tagging}_tagging_S={significance}/"
+    #workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_S={significance}_without_window/"
 
     if not os.path.exists(workingDirectoryPath):
         os.makedirs(workingDirectoryPath)
@@ -1229,25 +1233,25 @@ if __name__ == "__main__":
     # Calculate movie frame rate so that 100 Myrs pass every second
     frameRate = 100*(snapshotNumberRange.stop - 1)/(ageOfTheUniverse*snapshotNumberRange.step)
 
-    # logging.info("Starting astrolink...")
-    # #Do clustering over snapshots with AstroLink
-    # findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, particleName, nSamples, significance, rerun, tagging, dir_with_astrolink)
+    logging.info("Starting astrolink...")
+    #Do clustering over snapshots with AstroLink
+    findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, particleName, nSamples, significance, rerun, tagging, dir_with_astrolink)
 
-    # logging.info("Finished Astrolink, starting FuzzyCat...")
-    # #calculate fuzzycat window size
-    # fuzzycat_window = calculateFuzzyCatWindowSize(snapshotFilePaths, snapshotNumberRange.stop - 1, ageOfTheUniverse)
-    # logging.info(f"FuzzyCat window size: {fuzzycat_window}")
-
-    # #Run FuzzyCat on AstroLink clusters
-    # runFuzzyCatOnClustersFromSnapshots(workingDirectoryPath, nSamples, minStability, fuzzycat_window)
-    # logging.info("Finished FuzzyCat, starting plotting...")
-    # #Make movie of stable clusters over time
-    # makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate, plot_labels)
-    # logging.info("Finished plotting")
+    logging.info("Finished Astrolink, starting FuzzyCat...")
+    #calculate fuzzycat window size
+    #fuzzycat_window = calculateFuzzyCatWindowSize(snapshotFilePaths, snapshotNumberRange.stop - 1, ageOfTheUniverse)
+    fuzzycat_window = None
+    logging.info(f"FuzzyCat window size: {fuzzycat_window}")
+    #Run FuzzyCat on AstroLink clusters
+    runFuzzyCatOnClustersFromSnapshots(workingDirectoryPath, nSamples, minStability, fuzzycat_window)
+    logging.info("Finished FuzzyCat, starting plotting...")
+    #Make movie of stable clusters over time
+    makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate, plot_labels)
+    logging.info("Finished plotting")
 
     #plotTemperatureCuts(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate)
     #logging.info("Saving star ages for analysis...")
-    save_star_data(snapshotFilePaths, workingDirectoryPath)
+    #save_star_data(snapshotFilePaths, workingDirectoryPath)
 
     # logging.info("Starting star cluster analysis...")
     # star_cluster_analysis(snapshotFilePaths, workingDirectoryPath, axisLimits, frameRate)
