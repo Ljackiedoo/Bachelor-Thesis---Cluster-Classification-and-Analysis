@@ -16,11 +16,14 @@ from fuzzycat import FuzzyCat, FuzzyPlots
 from astrolink.io import loadAstroLinkObject
 from astrolink.io import saveAstroLinkObject
 
-def loadGalaxyAsArrays(snapshotFilePath, particleName, featureSpaceNames = ['pos', 'vel', 'mass']):
+def loadGalaxyAsArrays(snapshotFilePath, particleName, tagging):
     """Returns the main halo data, from the simulation file `snapshotFilePath`,
     for particle `particleName`, in the feature spaces specified by
     `featureSpaceNames`.
     """
+    # Feature space names for the particles
+    featureSpaceNames = ['pos', 'vel']
+    chemical_abundances = ['metals', 'FeMassFrac', 'OxMassFrac']
 
     # Load the simulation snapshot
     simulation = pb.load(snapshotFilePath)
@@ -41,6 +44,10 @@ def loadGalaxyAsArrays(snapshotFilePath, particleName, featureSpaceNames = ['pos
         darkMatterWeights = np.array(mainHalo.dm['mass'])
         return darkMatter, darkMatterIDs, darkMatterWeights, simulation
     if particleName == 'stars':
+        if tagging == 'chemical':
+            featureSpaceNames = chemical_abundances
+        elif tagging == 'chemodynamical':
+            featureSpaceNames.extend(chemical_abundances)
         stars = np.column_stack([mainHalo.stars[feature] for feature in featureSpaceNames])
         stars -= centre
         starsIDs = mainHalo.stars['iord']
@@ -54,13 +61,17 @@ def loadGalaxyAsArrays(snapshotFilePath, particleName, featureSpaceNames = ['pos
         gasTemperatures = np.array(mainHalo.gas['temp'])
         return gas, gasIDs, gasMasses, gasTemperatures, simulation
     if particleName == 'stars_gas':
+        gas = np.column_stack([mainHalo.gas[feature] for feature in featureSpaceNames])
+        gas -= centre
+        gasIDs = mainHalo.gas['iord']
+        if tagging == 'chemical':
+            featureSpaceNames = chemical_abundances
+        elif tagging == 'chemodynamical':
+            featureSpaceNames.extend(chemical_abundances)
         stars = np.column_stack([mainHalo.stars[feature] for feature in featureSpaceNames])
         stars -= centre
         starsIDs = mainHalo.stars['iord']
         starMasses = np.array(mainHalo.stars['mass'])
-        gas = np.column_stack([mainHalo.gas[feature] for feature in featureSpaceNames])
-        gas -= centre
-        gasIDs = mainHalo.gas['iord']
         gasMasses = np.array(mainHalo.gas['mass'])
         particles = np.vstack([stars, gas])
         particleIDs = np.hstack([starsIDs, gasIDs])
@@ -69,16 +80,20 @@ def loadGalaxyAsArrays(snapshotFilePath, particleName, featureSpaceNames = ['pos
         return particles, particleIDs, allMasses, simulation
     
     if particleName == 'stars_gas_dm':
+        gas = np.column_stack([mainHalo.gas[feature] for feature in featureSpaceNames])
+        gas -= centre
+        darkMatter = np.column_stack([mainHalo.dm[feature] for feature in featureSpaceNames])
+        darkMatter -= centre
+        if tagging == 'chemical':
+            featureSpaceNames = chemical_abundances
+        elif tagging == 'chemodynamical':
+            featureSpaceNames.extend(chemical_abundances)
         stars = np.column_stack([mainHalo.stars[feature] for feature in featureSpaceNames])
         stars -= centre
         starsIDs = mainHalo.stars['iord']
         starMasses = np.array(mainHalo.stars['mass'])
-        gas = np.column_stack([mainHalo.gas[feature] for feature in featureSpaceNames])
-        gas -= centre
         gasIDs = mainHalo.gas['iord']
         gasMasses = np.array(mainHalo.gas['mass'])
-        darkMatter = np.column_stack([mainHalo.dm[feature] for feature in featureSpaceNames])
-        darkMatter -= centre
         darkMatterIDs = mainHalo.dm['iord']
         darkMatterWeights = np.array(mainHalo.dm['mass'])
         particles = np.vstack([stars, gas, darkMatter])
@@ -88,7 +103,7 @@ def loadGalaxyAsArrays(snapshotFilePath, particleName, featureSpaceNames = ['pos
         return particles, particleIDs, allMasses, simulation
         
 
-def findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, particleName, nSamples, significance, rerun, dir_with_astrolink):
+def findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, particleName, nSamples, significance, rerun, tagging, dir_with_astrolink):
     """Uses AstroLink to find the clusters within each main halo specified by
     `snapshotFilePaths` and `particleName`. Then saves them in different formats
     into the directory specified by `workingDirectoryPath`. `nSamples` is used
@@ -104,6 +119,7 @@ def findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, pa
 
     # Track cluster file names
     clusterFileNames = []
+    
 
     # Cycle through each snapshot, run AstroLink, and save the clusters
     for index, snapshotFilePath in enumerate(snapshotFilePaths):
@@ -112,7 +128,7 @@ def findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, pa
         if(particleName == 'gas'):
             particleArr, particleIDs, weights, temperatures, _ = loadGalaxyAsArrays(snapshotFilePath, particleName)
         else:
-            particleArr, particleIDs, weights,  _ = loadGalaxyAsArrays(snapshotFilePath, particleName)
+            particleArr, particleIDs, weights,  _ = loadGalaxyAsArrays(snapshotFilePath, particleName, tagging=tagging)
 
 
         print(f"Running AstroLink on the {particleName} particles of snapshot {snapshotFilePath.split('/')[-1]}   \t\t", end = '\r')
@@ -669,11 +685,12 @@ def star_cluster_analysis(snapshot_file_paths, working_directory_path, axisLimit
         fuzzy_cluster_snapshot_ranges[cluster_idx] = [min(snapshot_indices), max(snapshot_indices)]
 
         
-    fast_identify_burst_clusters(snapshot_file_paths, working_directory_path, analysis_dir, star_ages_dir, fuzzy_cluster_snapshot_ranges)
+    #fast_identify_burst_clusters(snapshot_file_paths, working_directory_path, analysis_dir, star_ages_dir, fuzzy_cluster_snapshot_ranges)
     burst_clusters = pd.read_csv(f"{analysis_dir}cluster_formation_metrics.csv").set_index('cluster_idx').to_dict(orient='index')
     print(f"Found {len(burst_clusters)} burst clusters out of {len(fuzzy_clusters)} total clusters")
 
     for cluster_idx in burst_clusters:
+        break
         cluster_dir = f"{plots_dir}cluster_{cluster_idx}/"
         os.makedirs(cluster_dir, exist_ok=True)
 
@@ -1105,6 +1122,9 @@ if __name__ == "__main__":
     # should plots have labels in the movie?
     plot_labels = False
 
+    # Choice of tagging from ['dynamical' (standard), 'chemical', 'chemodynamical']
+    tagging = 'dynamical'
+
     # The minimum life-span of fuzzy clusters in Mega-years
     minLongevityOfFuzzyClusters = 230 
     
@@ -1116,7 +1136,7 @@ if __name__ == "__main__":
 
     # Set up the working directory
     galaxyFolderName = '2.79e12_zoom_6_rerun'
-    workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_S={significance}_without_window/"
+    workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_{tagging}_tagging_S={significance}/"
     #workingDirectoryPath = f"/mnt/storage/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_last_100_snapshots_S_5/"
 
     if not os.path.exists(workingDirectoryPath):
@@ -1133,7 +1153,7 @@ if __name__ == "__main__":
         format='%(asctime)s - %(levelname)s - %(message)s'  # Define the log message format
     )
 
-    logging.info(f"Starting the clustering pipeline for {particleName} with {snapshots} snapshots and significance {significance}")
+    logging.info(f"Starting the clustering pipeline for {particleName} with {snapshots} snapshots and significance {significance}, tagging {tagging}")
     logging.info(f"Parameters: minLongevityOfFuzzyClusters={minLongevityOfFuzzyClusters}, ageOfTheUniverse={ageOfTheUniverse}, axisLimits={axisLimits}")
     
     # Get the simulation snapshot file paths
@@ -1164,15 +1184,15 @@ if __name__ == "__main__":
     dir_with_astrolink = ""
     rerun = False
 
-    for dir_path in other_significance_dirs:
-        astrolink_path = os.path.join(dir_path, "Astrolink_objects/")
-        if os.path.exists(astrolink_path) and os.path.isdir(astrolink_path):
-            if len(os.listdir(astrolink_path)) == snapshots:
-                dir_with_astrolink = astrolink_path
-                rerun = True
-                break
-            else:
-                print(f"Found Astrolink directory with {len(os.listdir(astrolink_path))} snapshots, expected {snapshots + 1}")
+    # for dir_path in other_significance_dirs:
+    #     astrolink_path = os.path.join(dir_path, "Astrolink_objects/")
+    #     if os.path.exists(astrolink_path) and os.path.isdir(astrolink_path):
+    #         if len(os.listdir(astrolink_path)) == snapshots:
+    #             dir_with_astrolink = astrolink_path
+    #             rerun = True
+    #             break
+    #         else:
+    #             print(f"Found Astrolink directory with {len(os.listdir(astrolink_path))} snapshots, expected {snapshots + 1}")
 
     if dir_with_astrolink == "":
         print("No other Astrolink directories found")
@@ -1190,26 +1210,26 @@ if __name__ == "__main__":
     # Calculate movie frame rate so that 100 Myrs pass every second
     frameRate = 100*(snapshotNumberRange.stop - 1)/(ageOfTheUniverse*snapshotNumberRange.step)
 
-    #logging.info("Starting astrolink...")
-    # Do clustering over snapshots with AstroLink
-    #findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, particleName, nSamples, significance, rerun, dir_with_astrolink)
+    logging.info("Starting astrolink...")
+    #Do clustering over snapshots with AstroLink
+    findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, particleName, nSamples, significance, rerun, tagging, dir_with_astrolink)
 
-    #logging.info("Finished Astrolink, starting FuzzyCat...")
+    logging.info("Finished Astrolink, starting FuzzyCat...")
     #calculate fuzzycat window size
-    #fuzzycat_window = calculateFuzzyCatWindowSize(snapshotFilePaths, snapshotNumberRange.stop - 1, ageOfTheUniverse)
-    #logging.info(f"FuzzyCat window size: {fuzzycat_window}")
+    fuzzycat_window = calculateFuzzyCatWindowSize(snapshotFilePaths, snapshotNumberRange.stop - 1, ageOfTheUniverse)
+    logging.info(f"FuzzyCat window size: {fuzzycat_window}")
 
-    # Run FuzzyCat on AstroLink clusters
-    #runFuzzyCatOnClustersFromSnapshots(workingDirectoryPath, nSamples, minStability, fuzzycat_window)
-    #logging.info("Finished FuzzyCat, starting plotting...")
-    # Make movie of stable clusters over time
-    #makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate, plot_labels)
-    #logging.info("Finished plotting")
+    #Run FuzzyCat on AstroLink clusters
+    runFuzzyCatOnClustersFromSnapshots(workingDirectoryPath, nSamples, minStability, fuzzycat_window)
+    logging.info("Finished FuzzyCat, starting plotting...")
+    #Make movie of stable clusters over time
+    makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate, plot_labels)
+    logging.info("Finished plotting")
 
     #plotTemperatureCuts(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate)
     #logging.info("Saving star ages for analysis...")
     #save_star_ages(snapshotFilePaths, workingDirectoryPath)
 
-    logging.info("Starting star cluster analysis...")
-    star_cluster_analysis(snapshotFilePaths, workingDirectoryPath, axisLimits, frameRate)
-    logging.info("Finished star cluster analysis")
+    # logging.info("Starting star cluster analysis...")
+    # star_cluster_analysis(snapshotFilePaths, workingDirectoryPath, axisLimits, frameRate)
+    # logging.info("Finished star cluster analysis")
