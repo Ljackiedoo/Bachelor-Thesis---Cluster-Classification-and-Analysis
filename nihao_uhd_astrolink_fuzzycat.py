@@ -406,7 +406,7 @@ def paintLabelsOntoSnapshot(particleArr, clusters_raw, labels, saveFileNameStem,
     gc.collect()
 
 
-def makeMovieOfFuzzyClustersOverTimeByParticleType(snapshotFilePaths, workingDirectoryPath, particleType, axisLimits, frameRate, plot_labels, color_mapping = None):
+def makeMovieOfFuzzyClustersOverTimeByParticleType(snapshotFilePaths, workingDirectoryPath, particleType, axisLimits, frameRate, plot_labels, tagging, color_mapping = None):
     """Makes a movie of the fuzzy clusters for a specific particle type (stars or gas) found by AstroLink and FuzzyCat
     as they evolve over time. Optimized for performance.
     """
@@ -433,7 +433,7 @@ def makeMovieOfFuzzyClustersOverTimeByParticleType(snapshotFilePaths, workingDir
         print(f"Loading {snapshotFileName}                                                         \t\t", end = '\r')
         # Load the galaxy
         
-        particleArr = loadGalaxyAsArrays(snapshotFilePath, particleName)[0]
+        particleArr = loadGalaxyAsArrays(snapshotFilePath, particleName, tagging)[0]
             
 
         print(f"Loading clusters of {particleName} particles from snapshot {snapshotFileName}   \t\t", end = '\r')
@@ -470,7 +470,7 @@ def makeMovieOfFuzzyClustersOverTimeByParticleType(snapshotFilePaths, workingDir
     )
 
 
-def makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate, plot_labels):
+def makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate, plot_labels, tagging):
     """Makes movies of the fuzzy clusters found by AstroLink and FuzzyCat as
     they evolve over time. For combined data, creates separate movies for each particle type.
     """
@@ -498,7 +498,7 @@ def makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, pa
 
         print(f"Creating movie for {particleType}...")
         makeMovieOfFuzzyClustersOverTimeByParticleType(
-            snapshotFilePaths, workingDirectoryPath, particleType, axisLimits, frameRate, plot_labels, color_mapping
+            snapshotFilePaths, workingDirectoryPath, particleType, axisLimits, frameRate, plot_labels, tagging, color_mapping,
         )     
 
 
@@ -622,218 +622,442 @@ def star_cluster_analysis(snapshot_file_paths, working_directory_path, axisLimit
         fuzzy_cluster_snapshot_ranges[cluster_idx] = [min(snapshot_indices), max(snapshot_indices)]
 
         
-    fast_identify_burst_clusters(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, fuzzy_cluster_snapshot_ranges)
+    #fast_identify_burst_clusters(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, fuzzy_cluster_snapshot_ranges)
     burst_clusters = pd.read_csv(f"{analysis_dir}cluster_formation_metrics.csv").set_index('cluster_idx').to_dict(orient='index')
     print(f"Found {len(burst_clusters)} burst clusters out of {len(fuzzy_clusters)} total clusters")
 
-    for cluster_idx in burst_clusters:
+    # for cluster_idx in burst_clusters:
 
-        burst_snapshot = burst_clusters[cluster_idx]['burst_snapshot']
-        #convert birth and death to relative years
-        cluster_detected_time = burst_clusters[cluster_idx]['cluster_detected_snapshot']*13.8/2000
-        cluster_lost_time = burst_clusters[cluster_idx]['cluster_lost_snapshot']*13.8/2000
-        burst_snapshot_time = burst_snapshot*13.8/2000
+    #     burst_snapshot = burst_clusters[cluster_idx]['burst_snapshot']
+    #     #convert birth and death to relative years
+    #     cluster_detected_time = burst_clusters[cluster_idx]['cluster_detected_snapshot']*13.8/2000
+    #     cluster_lost_time = burst_clusters[cluster_idx]['cluster_lost_snapshot']*13.8/2000
+    #     burst_snapshot_time = burst_snapshot*13.8/2000
         
-        cluster_dir = f"{age_distribution_plots_dir}cluster_{cluster_idx}/"
-        os.makedirs(cluster_dir, exist_ok=True)
+    #     cluster_dir = f"{age_distribution_plots_dir}cluster_{cluster_idx}/"
+    #     os.makedirs(cluster_dir, exist_ok=True)
 
-        all_member_ids_until_now = np.array([], dtype=int)
+    #     all_member_ids_until_now = np.array([], dtype=int)
 
 
-        fuzzy_start_idx, fuzzy_end_idx = fuzzy_clusters[cluster_idx]
-        astrolink_cluster_ids_in_fuzzycat_cluster = ordering[fuzzy_start_idx:fuzzy_end_idx]
-        clusterFileNames = np.load(f"{working_directory_path}clusterFileNames.npy")
-        index = f"{snap_idx:03d}"
-        # Get AstroLink clusters for this snapshot that belong to the current FuzzyCat cluster
-        cluster_filenames = [clusterFileNames[idx] for idx in astrolink_cluster_ids_in_fuzzycat_cluster if clusterFileNames[idx].startswith(index)]
-        print(f"Found {len(cluster_filenames)} AstroLink clusters in FuzzyCat cluster {cluster_idx}")
+    #     fuzzy_start_idx, fuzzy_end_idx = fuzzy_clusters[cluster_idx]
+    #     astrolink_cluster_ids_in_fuzzycat_cluster = ordering[fuzzy_start_idx:fuzzy_end_idx]
+    #     clusterFileNames = np.load(f"{working_directory_path}clusterFileNames.npy")
+    #     index = f"{snap_idx:03d}"
+    #     # Get AstroLink clusters for this snapshot that belong to the current FuzzyCat cluster
+    #     cluster_filenames = [clusterFileNames[idx] for idx in astrolink_cluster_ids_in_fuzzycat_cluster if clusterFileNames[idx].startswith(index)]
+    #     print(f"Found {len(cluster_filenames)} AstroLink clusters in FuzzyCat cluster {cluster_idx}")
 
    
-        start_idx = max(0, burst_snapshot - 5)
+    #     start_idx = max(0, burst_snapshot - 5)
 
-        for snap_idx in range(start_idx, n_snapshots):
-            snapshot_path = snapshot_file_paths[snap_idx]
-            snapshot_name = os.path.basename(snapshot_path)
-            print(f"Processing snapshot {snap_idx+1}/{n_snapshots}: {snapshot_name}")
+    #     for snap_idx in range(start_idx, n_snapshots):
+    #         snapshot_path = snapshot_file_paths[snap_idx]
+    #         snapshot_name = os.path.basename(snapshot_path)
+    #         print(f"Processing snapshot {snap_idx+1}/{n_snapshots}: {snapshot_name}")
             
-            # # Load the simulation data
-            # simulation = pb.load(snapshot_path)
+    #         # # Load the simulation data
+    #         # simulation = pb.load(snapshot_path)
             
-            # # Load the main halo and make it face-on
-            # main_halo = simulation.halos()[0]
-            # pb.analysis.angmom.faceon(main_halo)
-            # main_halo.physical_units()
+    #         # # Load the main halo and make it face-on
+    #         # main_halo = simulation.halos()[0]
+    #         # pb.analysis.angmom.faceon(main_halo)
+    #         # main_halo.physical_units()
 
             
-            # # Get particle data
-            # star_particles = main_halo.stars
-            # star_ids = star_particles['iord']
+    #         # # Get particle data
+    #         # star_particles = main_halo.stars
+    #         # star_ids = star_particles['iord']
 
 
-            star_data = np.load(f"{star_data_dir}star_data_{snap_idx:03d}.npy")
-            star_ids = star_data[:,0]
-            star_ages = star_data[:,1]
+    #         star_data = np.load(f"{star_data_dir}star_data_{snap_idx:03d}.npy")
+    #         star_ids = star_data[:,0]
+    #         star_ages = star_data[:,1]
             
-            # Load the raw cluster data
-            all_clusters = []
-            for cluster_filename in cluster_filenames:
-                cluster = np.load(f"{workingDirectoryPath}Clusters_iord/{cluster_filename}")
-                all_clusters.append(cluster)
+    #         # Load the raw cluster data
+    #         all_clusters = []
+    #         for cluster_filename in cluster_filenames:
+    #             cluster = np.load(f"{workingDirectoryPath}Clusters_iord/{cluster_filename}")
+    #             all_clusters.append(cluster)
 
-            # If we found any clusters, combine their particle data
-            if all_clusters:
-                member_ids = np.concatenate(all_clusters)
-            else:
-                member_ids = np.array([], dtype=int)
+    #         # If we found any clusters, combine their particle data
+    #         if all_clusters:
+    #             member_ids = np.concatenate(all_clusters)
+    #         else:
+    #             member_ids = np.array([], dtype=int)
 
-            all_member_ids_until_now = np.unique(np.concatenate((all_member_ids_until_now, member_ids)))
+    #         all_member_ids_until_now = np.unique(np.concatenate((all_member_ids_until_now, member_ids)))
 
-            #plot age distribution of stars in the cluster
-            this_snapshot_star_ages = star_ages[np.isin(star_ids, member_ids)]
-            star_ages_for_cluster_until_now = star_ages[np.isin(star_ids, all_member_ids_until_now)]
+    #         #plot age distribution of stars in the cluster
+    #         this_snapshot_star_ages = star_ages[np.isin(star_ids, member_ids)]
+    #         star_ages_for_cluster_until_now = star_ages[np.isin(star_ids, all_member_ids_until_now)]
 
-            ticks_linear = [0.1, 0.5, 1.0]  # in linear region (you can adjust)
-            ticks_log = list(range(1, 14))  # for the log region
-            all_ticks = ticks_linear + ticks_log
+    #         ticks_linear = [0.1, 0.5, 1.0]  # in linear region (you can adjust)
+    #         ticks_log = list(range(1, 14))  # for the log region
+    #         all_ticks = ticks_linear + ticks_log
 
-            #plot pdf of birth dates
-            plt.figure(figsize=(8, 6))
-            plt.hist(star_ages_for_cluster_until_now, bins=1000, histtype='stepfilled', color='b', linewidth=2, label='All Snapshots until now', )
-            plt.hist(this_snapshot_star_ages, bins=1000, histtype='step', color='r', linewidth=2, label='Current Snapshot')
-            plt.axvline(x=cluster_detected_time, color='purple', linestyle='--', label='Cluster detected')
-            plt.axvline(x=cluster_lost_time, color='orange', linestyle='--', label='Cluster lost')
-            plt.xscale('symlog', linthresh=1)
-            plt.xticks(all_ticks, [str(tick) for tick in ticks_linear] + [str(tick) for tick in ticks_log])
-            plt.xlim(0, 13.8)
-            plt.xlabel('Age (Gyr)')
-            plt.ylabel('No. of Particles')
-            plt.title(f'Star Particle Ages in Cluster {cluster_idx} (Snapshot {snap_idx})')
-            plt.legend()
-            plt.grid(True, alpha=0.3)
-            # Save the plot in the cluster's directory with a consistent naming pattern for the movie
-            plt.savefig(f"{cluster_dir}frame_{snap_idx:04d}.png", dpi=300)
-            plt.close()
+    #         #plot pdf of birth dates
+    #         plt.figure(figsize=(8, 6))
+    #         plt.hist(star_ages_for_cluster_until_now, bins=1000, histtype='stepfilled', color='b', linewidth=2, label='All Snapshots until now', )
+    #         plt.hist(this_snapshot_star_ages, bins=1000, histtype='step', color='r', linewidth=2, label='Current Snapshot')
+    #         plt.axvline(x=cluster_detected_time, color='purple', linestyle='--', label='Cluster detected')
+    #         plt.axvline(x=cluster_lost_time, color='orange', linestyle='--', label='Cluster lost')
+    #         plt.xscale('symlog', linthresh=1)
+    #         plt.xticks(all_ticks, [str(tick) for tick in ticks_linear] + [str(tick) for tick in ticks_log])
+    #         plt.xlim(0, 13.8)
+    #         plt.xlabel('Age (Gyr)')
+    #         plt.ylabel('No. of Particles')
+    #         plt.title(f'Star Particle Ages in Cluster {cluster_idx} (Snapshot {snap_idx})')
+    #         plt.legend()
+    #         plt.grid(True, alpha=0.3)
+    #         # Save the plot in the cluster's directory with a consistent naming pattern for the movie
+    #         plt.savefig(f"{cluster_dir}frame_{snap_idx:04d}.png", dpi=300)
+    #         plt.close()
 
 
-            # #plot Cdf of birth dates
-            # plt.figure(figsize=(8, 6))
-            # plt.hist(star_ages, bins=1000, density=True, cumulative=True, histtype='step', color='b', linewidth=2)
-            # plt.xscale('symlog', linthresh=1)
-            # plt.xticks(all_ticks, [str(tick) for tick in ticks_linear] + [str(tick) for tick in ticks_log])
-            # plt.xlim(0, 13.8)
-            # plt.xlabel('Age (Gyr)')
-            # plt.ylabel('Cumulative Fraction')
-            # plt.title(f'Star Particle Ages in Cluster {cluster_idx} (Snapshot {snap_idx})')
-            # plt.grid(True, alpha=0.3)
-            # # Save the plot in the cluster's directory with a consistent naming pattern for the movie
-            # plt.savefig(f"{cluster_dir}cdf_frame_{snap_idx:04d}.png", dpi=300)
-            # plt.close()
-        # After processing all snapshots, create movies for each cluster
-    print("Creating evolution movies for each cluster...")
-    movies_dir = f"{age_distribution_plots_dir}movies/"
-    os.makedirs(movies_dir, exist_ok=True)
-    for folder in os.listdir(age_distribution_plots_dir):
-        if not folder.startswith('cluster_'):
-            continue
-        cluster_idx = folder.split('_')[1]
-        cluster_dir = f"{age_distribution_plots_dir}cluster_{cluster_idx}/"
+    #         # #plot Cdf of birth dates
+    #         # plt.figure(figsize=(8, 6))
+    #         # plt.hist(star_ages, bins=1000, density=True, cumulative=True, histtype='step', color='b', linewidth=2)
+    #         # plt.xscale('symlog', linthresh=1)
+    #         # plt.xticks(all_ticks, [str(tick) for tick in ticks_linear] + [str(tick) for tick in ticks_log])
+    #         # plt.xlim(0, 13.8)
+    #         # plt.xlabel('Age (Gyr)')
+    #         # plt.ylabel('Cumulative Fraction')
+    #         # plt.title(f'Star Particle Ages in Cluster {cluster_idx} (Snapshot {snap_idx})')
+    #         # plt.grid(True, alpha=0.3)
+    #         # # Save the plot in the cluster's directory with a consistent naming pattern for the movie
+    #         # plt.savefig(f"{cluster_dir}cdf_frame_{snap_idx:04d}.png", dpi=300)
+    #         # plt.close()
+    #     # After processing all snapshots, create movies for each cluster
+    # print("Creating evolution movies for each cluster...")
+    # movies_dir = f"{age_distribution_plots_dir}movies/"
+    # os.makedirs(movies_dir, exist_ok=True)
+    # for folder in os.listdir(age_distribution_plots_dir):
+    #     if not folder.startswith('cluster_'):
+    #         continue
+    #     cluster_idx = folder.split('_')[1]
+    #     cluster_dir = f"{age_distribution_plots_dir}cluster_{cluster_idx}/"
         
-        movie_path = f"{movies_dir}cluster_{cluster_idx}_movie.mp4"
+    #     movie_path = f"{movies_dir}cluster_{cluster_idx}_movie.mp4"
         
-        # Check if there are any frames to make a movie
-        frames = glob.glob(f"{cluster_dir}frame_*.png")
-        if not frames:
-            print(f"No frames found for cluster {cluster_idx}, skipping movie creation")
-            continue
+    #     # Check if there are any frames to make a movie
+    #     frames = glob.glob(f"{cluster_dir}frame_*.png")
+    #     if not frames:
+    #         print(f"No frames found for cluster {cluster_idx}, skipping movie creation")
+    #         continue
         
-        print(f"Creating movie for cluster {cluster_idx}...")
-        try:
-            (
-                ffmpeg
-                .input(f"{cluster_dir}frame_*.png", pattern_type='glob', framerate=frameRate)
-                .output(movie_path)
-                .run()
-            )
-            print(f"Movie saved to: {movie_path}")
-        except Exception as e:
-            print(f"Error creating movie for cluster {cluster_idx}: {e}")
+    #     print(f"Creating movie for cluster {cluster_idx}...")
+    #     try:
+    #         (
+    #             ffmpeg
+    #             .input(f"{cluster_dir}frame_*.png", pattern_type='glob', framerate=frameRate)
+    #             .output(movie_path)
+    #             .run()
+    #         )
+    #         print(f"Movie saved to: {movie_path}")
+    #     except Exception as e:
+    #         print(f"Error creating movie for cluster {cluster_idx}: {e}")
 
-    make_movie_of_fuzzy_star_forming_clusters(burst_clusters, analysis_dir, working_directory_path, snapshot_file_paths, axisLimits, frameRate)
+    # make_movie_of_fuzzy_star_forming_clusters(burst_clusters, analysis_dir, working_directory_path, snapshot_file_paths, axisLimits, frameRate)
 
     # more plotting and analysis
     # 1. Plotting the mass distribution of stars in each star forming cluster
     mass_distributions_dir = f"{analysis_dir}mass_distributions/"
     os.makedirs(mass_distributions_dir, exist_ok=True)
+    # for cluster_idx in burst_clusters:
+    #     cluster_dir = f"{mass_distributions_dir}cluster_{cluster_idx}/"
+    #     os.makedirs(cluster_dir, exist_ok=True)
+
+    #     fuzzy_start_idx, fuzzy_end_idx = fuzzy_clusters[cluster_idx]
+    #     astrolink_cluster_ids_in_fuzzycat_cluster = ordering[fuzzy_start_idx:fuzzy_end_idx]
+    #     clusterFileNames = np.load(f"{working_directory_path}clusterFileNames.npy")
+        
+    #     burst_snapshot = burst_clusters[cluster_idx]['burst_snapshot']
+    #     #save masses of stars in the cluster per snapshot
+    #     mass_list = []
+    #     snap_indices = []
+    #     start_idx = max(0, burst_snapshot - 5)
+    #     for snap_idx in range(start_idx, n_snapshots):
+    #         snapshot_path = snapshot_file_paths[snap_idx]
+    #         snapshot_name = os.path.basename(snapshot_path)
+    #         print(f"Processing snapshot {snap_idx+1}/{n_snapshots}: {snapshot_name}")
+            
+    #         # Load the star ages data
+    #         star_data = np.load(f"{star_data_dir}star_data_{snap_idx:03d}.npy")
+    #         star_ids = star_data[:,0]
+    #         star_masses = star_data[:,2]
+
+    #         index = f"{snap_idx:03d}"
+    #         # Get AstroLink clusters for this snapshot that belong to the current FuzzyCat cluster
+    #         cluster_filenames = [clusterFileNames[idx] for idx in astrolink_cluster_ids_in_fuzzycat_cluster if clusterFileNames[idx].startswith(index)]
+    #         print(f"Found {len(cluster_filenames)} AstroLink clusters in FuzzyCat cluster {cluster_idx}")
+    #         # Load the raw cluster data
+    #         all_clusters = []
+    #         for cluster_filename in cluster_filenames:
+    #             cluster = np.load(f"{workingDirectoryPath}Clusters_iord/{cluster_filename}")
+    #             all_clusters.append(cluster)
+    #         # If we found any clusters, combine their particle data
+    #         if all_clusters:
+    #             member_ids = np.concatenate(all_clusters)
+    #         else:
+    #             member_ids = np.array([], dtype=int)
+            
+    #         # Get the masses of stars in the cluster
+    #         star_masses_in_cluster = star_masses[np.isin(star_ids, member_ids)]
+    #         mass_list.append(star_masses_in_cluster)
+    #         snap_indices.append(snap_idx)
+
+    #     # Plot the mass distribution of stars in the cluster
+    #     all_masses   = np.concatenate(mass_list)
+    #     min_mass     = np.min(all_masses)
+    #     max_mass     = np.max(all_masses)
+    #     bins         = np.linspace(min_mass, max_mass, 30)  # 30 equal‐width bins
+
+    #     plt.figure(figsize=(8, 5))
+    #     for masses, sidx in zip(mass_list, snap_indices):
+    #         plt.hist(
+    #             masses,
+    #             bins=bins,
+    #             histtype="step",
+    #             density=True,
+    #             linewidth=1.5,
+    #             label=f"snap {sidx:03d}"
+    #         )
+    #     plt.xlabel("Stellar Mass [Msol]")
+    #     plt.ylabel("Normalized Count (density)")
+    #     plt.title(f"Cluster {cluster_idx}: Mass Distributions, Snapshots {start_idx}→{n_snapshots-1}")
+    #     plt.legend(loc="upper right", fontsize="small", ncol=2)
+    #     plt.tight_layout()
+
+    #     # 7) Save the single figure for this entire cluster:
+    #     outfn_all = os.path.join(cluster_dir, f"all_snapshots_mass_dist.png")
+    #     plt.savefig(outfn_all, dpi=200)
+    #     plt.close()
+    #     print(f"  → Saved overlaid histogram for Cluster {cluster_idx} at {outfn_all}")
+
+
     for cluster_idx in burst_clusters:
         cluster_dir = f"{mass_distributions_dir}cluster_{cluster_idx}/"
         os.makedirs(cluster_dir, exist_ok=True)
 
         fuzzy_start_idx, fuzzy_end_idx = fuzzy_clusters[cluster_idx]
         astrolink_cluster_ids_in_fuzzycat_cluster = ordering[fuzzy_start_idx:fuzzy_end_idx]
-        clusterFileNames = np.load(f"{working_directory_path}clusterFileNames.npy")
+        # Ensure the path to clusterFileNames.npy is correct
+        clusterFileNames = np.load(f"{working_directory_path}clusterFileNames.npy") 
         
-
-        #save masses of stars in the cluster per snapshot
+        burst_snapshot = burst_clusters[cluster_idx]['burst_snapshot']
+        cluster_detected_snapshot = burst_clusters[cluster_idx]['cluster_start_snapshot']
+        cluster_lost_snapshot = burst_clusters[cluster_idx]['cluster_end_snapshot']
+        cluster_detected_time = cluster_detected_snapshot * 13.8 / 2000
+        cluster_lost_time = cluster_lost_snapshot * 13.8 / 2000
         mass_list = []
         snap_indices = []
-        start_idx = max(0, burst_snapshot - 5)
-        for snap_idx in range(start_idx, n_snapshots):
-            snapshot_path = snapshot_file_paths[snap_idx]
-            snapshot_name = os.path.basename(snapshot_path)
-            print(f"Processing snapshot {snap_idx+1}/{n_snapshots}: {snapshot_name}")
-            
-            # Load the star ages data
+        # Determine the range of snapshots to iterate over
+        loop_start_snap_idx = max(0, burst_snapshot - 5) 
+        
+        print(f"Processing Cluster {cluster_idx}, Snapshots from {loop_start_snap_idx} up to {n_snapshots-1}")
+
+        for snap_idx in range(loop_start_snap_idx, n_snapshots):
+            # snapshot_path and snapshot_name seem to be for diagnostic print only
+            # snapshot_path = snapshot_file_paths[snap_idx] 
+            # snapshot_name = os.path.basename(snapshot_path)
+            # print(f"Processing snapshot {snap_idx+1}/{n_snapshots}: {snapshot_name}") # Original print
+                
             star_data = np.load(f"{star_data_dir}star_data_{snap_idx:03d}.npy")
             star_ids = star_data[:,0]
             star_masses = star_data[:,2]
 
-            index = f"{snap_idx:03d}"
-            # Get AstroLink clusters for this snapshot that belong to the current FuzzyCat cluster
-            cluster_filenames = [clusterFileNames[idx] for idx in astrolink_cluster_ids_in_fuzzycat_cluster if clusterFileNames[idx].startswith(index)]
-            print(f"Found {len(cluster_filenames)} AstroLink clusters in FuzzyCat cluster {cluster_idx}")
-            # Load the raw cluster data
-            all_clusters = []
-            for cluster_filename in cluster_filenames:
-                cluster = np.load(f"{workingDirectoryPath}Clusters_iord/{cluster_filename}")
-                all_clusters.append(cluster)
-            # If we found any clusters, combine their particle data
-            if all_clusters:
-                member_ids = np.concatenate(all_clusters)
+            # Use a descriptive name for the snapshot index string
+            snapshot_index_str = f"{snap_idx:03d}"
+            
+            # Get AstroLink cluster filenames for this snapshot that belong to the current FuzzyCat cluster
+            # This assumes astrolink_cluster_ids_in_fuzzycat_cluster are indices for clusterFileNames array
+            candidate_filenames = clusterFileNames[astrolink_cluster_ids_in_fuzzycat_cluster]
+            relevant_cluster_filenames = [cfn for cfn in candidate_filenames if cfn.startswith(snapshot_index_str)]
+            
+            all_clusters_star_ids = []
+            for cluster_filename in relevant_cluster_filenames:
+                # Ensure workingDirectoryPath is correctly cased for Clusters_iord
+                cluster_data_path = os.path.join(workingDirectoryPath, "Clusters_iord", cluster_filename)
+                try:
+                    cluster_star_ids = np.load(cluster_data_path)
+                    all_clusters_star_ids.append(cluster_star_ids)
+                except FileNotFoundError:
+                    print(f"Warning: Cluster file {cluster_data_path} not found for snap {snap_idx}. Skipping this file.")
+                    continue
+
+            if all_clusters_star_ids:
+                member_ids = np.concatenate(all_clusters_star_ids)
+                member_ids = np.unique(member_ids) # Important if stars can be in multiple sub-clusters
             else:
                 member_ids = np.array([], dtype=int)
             
-            # Get the masses of stars in the cluster
             star_masses_in_cluster = star_masses[np.isin(star_ids, member_ids)]
             mass_list.append(star_masses_in_cluster)
             snap_indices.append(snap_idx)
 
-        # Plot the mass distribution of stars in the cluster
-        all_masses   = np.concatenate(mass_list)
-        min_mass     = np.min(all_masses)
-        max_mass     = np.max(all_masses)
-        bins         = np.linspace(min_mass, max_mass, 30)  # 30 equal‐width bins
+        # --- New Plotting Section ---
+        
+        # Filter out snapshots where no stars were found in the cluster for this specific mass_list
+        mass_list_with_data = []
+        snap_indices_with_data = []
+        for m, s_idx in zip(mass_list, snap_indices):
+            if len(m) > 0:
+                mass_list_with_data.append(m)
+                snap_indices_with_data.append(s_idx)
 
-        plt.figure(figsize=(8, 5))
-        for masses, sidx in zip(mass_list, snap_indices):
-            plt.hist(
-                masses,
-                bins=bins,
-                histtype="step",
-                density=True,
-                linewidth=1.5,
-                label=f"snap {sidx:03d}"
+        if not mass_list_with_data:
+            print(f"  → No stars with mass data found for Cluster {cluster_idx} across any processed snapshot. Skipping plots.")
+            plt.close('all') # Close any stray figures
+            continue
+
+        # Determine common bins for histograms based on all mass data for this cluster
+        all_masses_for_bins = np.concatenate(mass_list_with_data)
+        # This check is mostly redundant due to `if not mass_list_with_data` but good for safety:
+        if len(all_masses_for_bins) == 0: 
+            print(f"  → Concatenated all_masses is empty for Cluster {cluster_idx} (should not happen). Skipping plots.")
+            plt.close('all')
+            continue
+
+        min_m_overall, max_m_overall = np.min(all_masses_for_bins), np.max(all_masses_for_bins)
+        
+        # Define plot range for mass axis; handle cases with single mass value or very narrow range
+        if np.isclose(min_m_overall, max_m_overall):
+            offset = 0.5 if np.isclose(min_m_overall, 0.0) else 0.1 * abs(min_m_overall)
+            if np.isclose(offset, 0.0): offset = 0.5 # Ensure offset is non-zero (e.g. if min_m_overall is extremely small)
+            min_m_plot = min_m_overall - offset
+            max_m_plot = max_m_overall + offset
+        else:
+            min_m_plot = min_m_overall
+            max_m_plot = max_m_overall
+
+        # Global bins for all plots for this cluster (30 bins, 31 edges)
+        bins = np.linspace(min_m_plot, max_m_plot, 31) 
+
+        # Fallback if bin creation fails (e.g., min_m_plot and max_m_plot are still identical)
+        if len(np.unique(bins)) < 2: 
+            print(f"Warning: Bin edges are not unique for cluster {cluster_idx} (min_m={min_m_overall}, max_m={max_m_overall}). Using fallback bins.")
+            # Try a fixed offset if the relative one failed
+            bins = np.linspace(min_m_overall - 0.5, min_m_overall + 0.5, 31) 
+            if len(np.unique(bins)) < 2: # If still failing (highly pathological)
+                bins = np.linspace(-1, 1, 31) # Absolute fallback range
+                print(f"ERROR: Pathological bin calculation for cluster {cluster_idx}. Using default bins [-1, 1].")
+        
+        # Determine snapshot range for titles from actual data plotted
+        title_snap_min = snap_indices_with_data[0]
+        title_snap_max = snap_indices_with_data[-1]
+
+        # --- Plot 1: 2D Heatmap of Mass Distribution over Time (Axes Swapped) ---
+    
+        # Calculate histogram data for each snapshot
+        # hist_data_list will store 1D arrays of histogram counts (densities)
+        hist_data_list = []
+        for current_masses in mass_list_with_data: # Already filtered for non-empty lists
+            counts, _ = np.histogram(current_masses, bins=bins, density=True)
+            hist_data_list.append(counts)
+        
+        if not hist_data_list: 
+            print(f"  → No histogram data to plot 2D heatmap for Cluster {cluster_idx}.")
+        else:
+            # Convert list of 1D arrays to a 2D numpy array.
+            # Each row corresponds to a snapshot, each column to a mass bin.
+            # So, hist_data_2d has shape (number_of_snapshots, number_of_mass_bins)
+            hist_data_2d_original_orientation = np.array(hist_data_list)
+            
+            plt.figure(figsize=(10, 7)) # You might adjust figsize, e.g., (12, 6) if many snapshots
+            
+            # Define mesh edges for pcolormesh.
+            # For the swapped axes:
+            # X-axis will be Snapshot Index
+            # Y-axis will be Stellar Mass
+            
+            # x_mesh_edges: Edges for the new X-axis (Snapshot Index).
+            # Corresponds to the columns of the transposed data array.
+            x_mesh_edges = np.arange(len(snap_indices_with_data) + 1) 
+            
+            # y_mesh_edges: Edges for the new Y-axis (Stellar Mass).
+            # Corresponds to the rows of the transposed data array. `bins` are already edges.
+            y_mesh_edges = bins 
+            
+            # Prepare data for pcolormesh:
+            # pcolormesh(X_edges, Y_edges, C_values) expects C_values[i,j] to map to Y_edges[i] and X_edges[j].
+            # If Y is mass (rows) and X is snapshots (columns), C needs shape (num_mass_bins, num_snapshots).
+            # So, we transpose hist_data_2d_original_orientation.
+            data_for_pcolormesh = hist_data_2d_original_orientation.T
+
+            plt.pcolormesh(
+                x_mesh_edges,        # Edges for Snapshot Index axis
+                y_mesh_edges,        # Edges for Stellar Mass axis
+                data_for_pcolormesh, # Transposed data, shape (num_mass_bins, num_snapshots)
+                cmap='viridis', 
+                shading='flat', 
+                vmin=0  # Density is non-negative
             )
-        plt.xlabel("Stellar Mass [Msol]")
-        plt.ylabel("Normalized Count (density)")
-        plt.title(f"Cluster {cluster_idx}: Mass Distributions, Snapshots {start_idx}→{n_snapshots-1}")
-        plt.legend(loc="upper right", fontsize="small", ncol=2)
-        plt.tight_layout()
+            plt.colorbar(label="Normalized Count (density)")
+            
+            # Set labels for the swapped axes
+            plt.xlabel("Snapshot Index")
+            plt.ylabel("Stellar Population Mass [Msol]")
+            
+            # Set x-axis ticks to actual snapshot numbers.
+            # The logic previously used for y-axis snapshot ticks is now applied to the x-axis.
+            # tick_positions_x are centers of the pcolormesh cells along the new x-axis (snapshots).
+            tick_positions_x = x_mesh_edges[:-1] + 0.5 
+            tick_labels_x = [str(s) for s in snap_indices_with_data]
+            
+            # Reduce number of x-ticks if too many snapshots to display clearly
+            if len(snap_indices_with_data) > 20: # Adjust this threshold as needed
+                num_ticks_display = 10 
+                step = max(1, len(snap_indices_with_data) // num_ticks_display)
+                plt.xticks(tick_positions_x[::step], tick_labels_x[::step])
+            else:
+                plt.xticks(tick_positions_x, tick_labels_x)
 
-        # 7) Save the single figure for this entire cluster:
-        outfn_all = os.path.join(cluster_dir, f"all_snapshots_mass_dist.png")
-        plt.savefig(outfn_all, dpi=200)
-        plt.close()
-        print(f"  → Saved overlaid histogram for Cluster {cluster_idx} at {outfn_all}")
+            # Y-axis (Mass) ticks can often be left to Matplotlib's default.
+            # If you need to customize them, you could use, for example:
+            # from matplotlib.ticker import MaxNLocator
+            # plt.gca().yaxis.set_major_locator(MaxNLocator(nbins=6)) # Show approx 6 ticks on mass axis
+
+            plt.title(f"Cluster {cluster_idx}: Mass Distribution Evolution, Snapshots {title_snap_min}→{title_snap_max}")
+            plt.tight_layout()
+            
+            # Save the figure with the original heatmap filename, effectively replacing it
+            outfn_heatmap = os.path.join(cluster_dir, f"mass_dist_heatmap.png")
+            plt.savefig(outfn_heatmap, dpi=200)
+            plt.close() # Close the heatmap figure
+            print(f"  → Saved heatmap (axes swapped) for Cluster {cluster_idx} at {outfn_heatmap}")
+
+        # --- Plot 2: Summary Statistics (Mean, Median, IQR) over Time ---
+        # Calculate statistics only if there's data
+        if not mass_list_with_data: # Should be caught earlier, but as a safeguard
+            print(f"  → No data to plot summary statistics for Cluster {cluster_idx}.")
+        else:
+            mean_masses = [np.mean(m) for m in mass_list_with_data]
+            median_masses = [np.median(m) for m in mass_list_with_data]
+            q25_masses = [np.percentile(m, 25) for m in mass_list_with_data]
+            q75_masses = [np.percentile(m, 75) for m in mass_list_with_data]
+
+            plt.figure(figsize=(10, 6))
+            plt.plot(snap_indices_with_data, mean_masses, label='Mean Mass', marker='o', linestyle='-')
+            plt.plot(snap_indices_with_data, median_masses, label='Median Mass', marker='s', linestyle='--')
+            # Shaded region for IQR
+            plt.fill_between(snap_indices_with_data, q25_masses, q75_masses, alpha=0.2, label='IQR (25th-75th percentile)', color='gray')
+            plt.axvline(x=cluster_detected_snapshot, color='purple', linestyle='--', label='Cluster detected')
+            plt.axvline(x=cluster_lost_snapshot, color='orange', linestyle='--', label='Cluster lost')
+
+            plt.xlabel("Snapshot Index")
+            plt.ylabel("Stellar Mass [Msol]")
+            plt.title(f"Cluster {cluster_idx}: Mass Statistics Evolution, Snapshots {title_snap_min}→{title_snap_max}")
+            plt.legend()
+            plt.grid(True, linestyle=':', alpha=0.7)
+            plt.tight_layout()
+            
+            outfn_stats = os.path.join(cluster_dir, f"mass_stats_evolution.png")
+            plt.savefig(outfn_stats, dpi=200)
+            plt.close() # Close the statistics figure
+            print(f"  → Saved mass statistics plot for Cluster {cluster_idx} at {outfn_stats}")
+
+    # End of the loop for cluster_idx
             
             
 
@@ -864,7 +1088,7 @@ def fast_identify_burst_clusters(snapshot_file_paths, working_directory_path, an
     print("Finding potential star forming clusters...")
 
     csv_filepath = os.path.join(analysis_path, "cluster_formation_metrics.csv")
-    header_columns = ['cluster_idx', 'star_count', 'age_range', 't25_t75']
+    header_columns = ['cluster_idx', 'cluster_start_snapshot', 'cluster_end_snapshot', 'star_count', 't25_t75', 'burst_snapshot']
     processed_cluster_ids = set()
     file_exists = os.path.exists(csv_filepath)
 
@@ -899,9 +1123,6 @@ def fast_identify_burst_clusters(snapshot_file_paths, working_directory_path, an
             continue
         cluster_start_snapshot = fuzzy_cluster_threshold_ranges[cluster_idx][0]
         cluster_end_snapshot = fuzzy_cluster_threshold_ranges[cluster_idx][1]
-
-        cluster_detected_time = (snap_idx - cluster_start_snapshot)*13.8/2000
-        cluster_lost_time = (snap_idx - cluster_end_snapshot)*13.8/2000
 
         burst_recorded_for_this_cluster_idx_this_run = False
 
@@ -954,6 +1175,9 @@ def fast_identify_burst_clusters(snapshot_file_paths, working_directory_path, an
             t25 = np.percentile(sorted_ages, 25)
             t75 = np.percentile(sorted_ages, 75)
             t25_t75 = t75 - t25
+
+            cluster_detected_time = (snap_idx - cluster_start_snapshot)*13.8/2000
+            cluster_lost_time = (snap_idx - cluster_end_snapshot)*13.8/2000
 
 
             if t25_t75 < threshold_fraction and np.abs(cluster_detected_time - snap_idx*13.8/2000) < 1.0:
@@ -1159,8 +1383,8 @@ if __name__ == "__main__":
     # Set up the working directory
     galaxyFolderName = '2.79e12_zoom_6_rerun'
     #workingDirectoryPath = f"/mnt/storage/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_last_100_snapshots_S_5/"
-    workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_{tagging}_tagging_S={significance}/"
-    #workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_S={significance}_without_window/"
+    #workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_{tagging}_tagging_S={significance}/"
+    workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_S={significance}_without_window/"
 
     if not os.path.exists(workingDirectoryPath):
         os.makedirs(workingDirectoryPath)
@@ -1233,20 +1457,20 @@ if __name__ == "__main__":
     # Calculate movie frame rate so that 100 Myrs pass every second
     frameRate = 100*(snapshotNumberRange.stop - 1)/(ageOfTheUniverse*snapshotNumberRange.step)
 
-    logging.info("Starting astrolink...")
+    #logging.info("Starting astrolink...")
     #Do clustering over snapshots with AstroLink
-    findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, particleName, nSamples, significance, rerun, tagging, dir_with_astrolink)
+    #findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, particleName, nSamples, significance, rerun, tagging, dir_with_astrolink)
 
-    logging.info("Finished Astrolink, starting FuzzyCat...")
-    #calculate fuzzycat window size
-    #fuzzycat_window = calculateFuzzyCatWindowSize(snapshotFilePaths, snapshotNumberRange.stop - 1, ageOfTheUniverse)
-    fuzzycat_window = None
-    logging.info(f"FuzzyCat window size: {fuzzycat_window}")
-    #Run FuzzyCat on AstroLink clusters
-    runFuzzyCatOnClustersFromSnapshots(workingDirectoryPath, nSamples, minStability, fuzzycat_window)
+    # logging.info("Finished Astrolink, starting FuzzyCat...")
+    # #calculate fuzzycat window size
+    # #fuzzycat_window = calculateFuzzyCatWindowSize(snapshotFilePaths, snapshotNumberRange.stop - 1, ageOfTheUniverse)
+    # fuzzycat_window = None
+    # logging.info(f"FuzzyCat window size: {fuzzycat_window}")
+    # #Run FuzzyCat on AstroLink clusters
+    # runFuzzyCatOnClustersFromSnapshots(workingDirectoryPath, nSamples, minStability, fuzzycat_window)
     logging.info("Finished FuzzyCat, starting plotting...")
     #Make movie of stable clusters over time
-    makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate, plot_labels)
+    makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate, plot_labels, tagging)
     logging.info("Finished plotting")
 
     #plotTemperatureCuts(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate)
