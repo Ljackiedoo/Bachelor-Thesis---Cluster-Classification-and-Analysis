@@ -9,6 +9,7 @@ import pynbody as pb
 import matplotlib.pyplot as plt
 import matplotlib.colors as col
 import ffmpeg
+import random
 
 from astrolink import AstroLink
 from fuzzycat import FuzzyCat, FuzzyPlots
@@ -626,6 +627,7 @@ def star_cluster_analysis(snapshot_file_paths, working_directory_path, axisLimit
     burst_clusters = pd.read_csv(f"{analysis_dir}cluster_formation_metrics.csv").set_index('cluster_idx').to_dict(orient='index')
     print(f"Found {len(burst_clusters)} burst clusters out of {len(fuzzy_clusters)} total clusters")
 
+    
     # for cluster_idx in burst_clusters:
 
     #     burst_snapshot = burst_clusters[cluster_idx]['burst_snapshot']
@@ -835,6 +837,13 @@ def star_cluster_analysis(snapshot_file_paths, working_directory_path, axisLimit
     #     plt.close()
     #     print(f"  → Saved overlaid histogram for Cluster {cluster_idx} at {outfn_all}")
 
+    all_snapshots_masses = { c: {} for c in burst_clusters }
+
+    # #only use a few random burst clusters for now for faster analysis
+    # num_clusters_to_select = 5
+    # all_cluster_ids = list(burst_clusters.keys())
+    # selected_cluster_ids = random.sample(all_cluster_ids, num_clusters_to_select)
+    # burst_clusters = {cluster_id: burst_clusters[cluster_id] for cluster_id in selected_cluster_ids}
 
     for cluster_idx in burst_clusters:
         cluster_dir = f"{mass_distributions_dir}cluster_{cluster_idx}/"
@@ -895,6 +904,8 @@ def star_cluster_analysis(snapshot_file_paths, working_directory_path, axisLimit
             star_masses_in_cluster = star_masses[np.isin(star_ids, member_ids)]
             mass_list.append(star_masses_in_cluster)
             snap_indices.append(snap_idx)
+
+            all_snapshots_masses[cluster_idx][snap_idx] = star_masses_in_cluster
 
         # --- New Plotting Section ---
         
@@ -1056,11 +1067,105 @@ def star_cluster_analysis(snapshot_file_paths, working_directory_path, axisLimit
             plt.savefig(outfn_stats, dpi=200)
             plt.close() # Close the statistics figure
             print(f"  → Saved mass statistics plot for Cluster {cluster_idx} at {outfn_stats}")
+    #save all snapshots' masses for later use
+    np.save(f"{mass_distributions_dir}all_snapshots_masses.npy", all_snapshots_masses, allow_pickle=True)
 
     # End of the loop for cluster_idx
+
+    all_snapshot_masses = np.load(f"{mass_distributions_dir}all_snapshots_masses.npy", allow_pickle=True).item()
+    nonempty_clusters = [c for c in all_snapshot_masses if any(len(m) > 0 for m in all_snapshot_masses[c].values())]
+    final_snapshot_idx = 30
+    cluster_masses_at_final_snap = []
+    #---- Mass power law analysis ---
+    for cluster_idx in nonempty_clusters:
+        # first_snapshot = burst_clusters[cluster_idx]['cluster_start_snapshot']
+        # last_snapshot = burst_clusters[cluster_idx]['cluster_end_snapshot']
+        # middle_snapshot = (first_snapshot + last_snapshot) // 2
+
+        # snapshots_to_plot = [first_snapshot, middle_snapshot, last_snapshot]
+        # colors = ['blue', 'orange', 'green']
+        # labels = ['Early', 'Middle', 'Late']
+        
+        
+        # for snap_idx in range(n_snapshots):
+        #     snap_masses = all_snapshot_masses[cluster_idx].get(snap_idx, np.array([]))
+        #     if snap_masses.size > 0:
+        #         Mcl = np.sum(snap_masses)  # Total mass of the cluster at this snapshot
+        #         cluster_masses.append(Mcl)
+
+        snap_masses = all_snapshot_masses[cluster_idx].get(final_snapshot_idx, np.array([]))
+        if snap_masses.size > 0:
+            Mcl = np.sum(snap_masses)
+            cluster_masses_at_final_snap.append(Mcl)
+    cluster_masses = np.array(cluster_masses_at_final_snap)
+
+    logM = np.log10(cluster_masses)
+    num_bins = 20
+    dN, bin_edges = np.histogram(logM, bins=num_bins)
+    dlogM = bin_edges[1:] - bin_edges[:-1]      # all equal if np.linspace
+    dN_dlogM  = dN / dlogM
+    centers = 0.5*(bin_edges[:-1] + bin_edges[1:])
+    m_centers = 10**centers  # Convert centers back to linear scale
+    
+    mask = (m_centers >= 1e6) & (dN_dlogM > 0)  # Filter for Mcl ≥ 1e6 and dN > 0
+    x = centers[mask]          # this is log10(Mcl)
+    y = np.log10(dN_dlogM[mask])     # log10(N per bin)
+    if x.size > 1:
+        slope, intercept = np.polyfit(x, y, 1)
+        x_fit = np.linspace(x.min(), x.max(), 100)
+        y_fit = slope*x_fit + intercept
+        plt.figure(figsize=(10, 6))
+        plt.scatter(m_centers, dN_dlogM, s=20)
+        plt.plot(10**x_fit, 10**y_fit, '--', label=f"fit tail (M≥1e6) slope = {slope:.2f}")
+        plt.legend()
+        plt.xscale('log')
+        plt.yscale('log')
+        plt.xlabel("Cluster Mass")
+        plt.ylabel("Number of Clusters per delta log(M)")
+        plt.title("Cluster Mass Function")
+        plt.savefig(f"{mass_distributions_dir}cluster_mass_function.png", dpi=200)
+        plt.close()
+        print(f"Saved cluster mass function plot to {mass_distributions_dir}cluster_mass_function.png")
+    else:
+        print("Not enough data points to fit a power law for cluster masses at the final snapshot.")
             
+            # min_mass = np.min(snap_masses)
+            # log_m_min = np.log10(min_mass if min_mass > 0 else 1e-10)  # Avoid log(0)
+            # log_m_max = np.log10(np.max(snap_masses))#
+            # num_bins = 100
+            # bin_edges_log = np.linspace(log_m_min, log_m_max, num_bins +1)  # 100 bins for log-mass histogra
+            # bin_edges = 10**bin_edges_log
+
+            # dN, _ = np.histogram(snap_masses, bins=bin_edges)
+            # dm = np.diff(bin_edges)
+            # dN_per_dm = np.zeros_like(dm, dtype=float)
+            # valid_dm = dm > 0  # Avoid division by zero
+            # dN_per_dm[valid_dm] = dN[valid_dm] / dm[valid_dm]
             
 
+            # m_center = np.sqrt(bin_edges[:-1] * bin_edges[1:])  # Geometric mean of bin edges
+            # valid_points_for_log = (dN>0) & (m_center > 0) & (dN_per_dm > 0)  # Ensure we only plot valid points
+            # log_m_center = np.log10(m_center[valid_points_for_log])
+            # log_dN_per_dm = np.log10(dN_per_dm[valid_points_for_log])
+
+            # coef = np.polyfit(log_m_center, log_dN_per_dm, 1)
+            # slope, intercept = coef
+
+            # x_fit = np.linspace(log_m_center.min(), log_m_center.max(), 100)
+            # y_fit = slope * x_fit + intercept
+
+            # plt.figure(figsize=(8, 6))
+            # plt.scatter(log_m_center, log_dN_per_dm, color=color, label=f"{label} Snapshot {snap_idx:03d}", s=10)
+            # plt.plot(x_fit, y_fit, linestyle='--', label=f"fit: slope = {slope:.2f}")
+            # plt.xlabel("log10(Mass) [Msol]")
+            # plt.ylabel("log10(dN/dm) [Msol^-1]")
+            # plt.title(f"Mass Distribution Power Law for Cluster {cluster_idx} at Snapshot {snap_idx:03d}")
+            # plt.legend()
+            # plt.grid(True, linestyle='--', alpha=0.5)
+            # plt.tight_layout()
+            # plt.savefig(f"{mass_distributions_dir}cluster_{cluster_idx}_power_law_snapshot_{snap_idx:03d}.png", dpi=200)
+            # plt.close()
+            # print(f"Saved power law plot for Cluster {cluster_idx} at Snapshot {snap_idx:03d}")
 
 
 
@@ -1468,15 +1573,15 @@ if __name__ == "__main__":
     # logging.info(f"FuzzyCat window size: {fuzzycat_window}")
     # #Run FuzzyCat on AstroLink clusters
     # runFuzzyCatOnClustersFromSnapshots(workingDirectoryPath, nSamples, minStability, fuzzycat_window)
-    logging.info("Finished FuzzyCat, starting plotting...")
-    #Make movie of stable clusters over time
-    makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate, plot_labels, tagging)
-    logging.info("Finished plotting")
+    # logging.info("Finished FuzzyCat, starting plotting...")
+    # #Make movie of stable clusters over time
+    # makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate, plot_labels, tagging)
+    # logging.info("Finished plotting")
 
     #plotTemperatureCuts(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate)
     #logging.info("Saving star ages for analysis...")
     #save_star_data(snapshotFilePaths, workingDirectoryPath)
 
-    # logging.info("Starting star cluster analysis...")
-    # star_cluster_analysis(snapshotFilePaths, workingDirectoryPath, axisLimits, frameRate)
-    # logging.info("Finished star cluster analysis")
+    logging.info("Starting star cluster analysis...")
+    star_cluster_analysis(snapshotFilePaths, workingDirectoryPath, axisLimits, frameRate)
+    logging.info("Finished star cluster analysis")
