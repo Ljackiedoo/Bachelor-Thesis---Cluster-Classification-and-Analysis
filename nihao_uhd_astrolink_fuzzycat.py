@@ -1079,6 +1079,7 @@ def star_cluster_analysis(snapshot_file_paths, working_directory_path, axisLimit
     results_snapshots = []
     results_mean_slopes = []
     results_slope_errors = []
+    num_bootstraps = 1000
     for final_snapshot_idx in range(n_snapshots):
         cluster_masses_at_final_snap = []
         #---- Mass power law analysis ---
@@ -1092,58 +1093,91 @@ def star_cluster_analysis(snapshot_file_paths, working_directory_path, axisLimit
         if len(cluster_masses) < 20:
             print(f"Not enough clusters found for snapshot {final_snapshot_idx}. Skipping power law analysis.")
             continue
-        num_calculations_for_error = 5
-        middle_num_bins = int(np.round(np.sqrt(len(cluster_masses))))  # Use square root of the number of clusters for binning
-        if middle_num_bins < 5:
-            middle_num_bins = 5
-        step = middle_num_bins // num_calculations_for_error
-        half = num_calculations_for_error // 2
-        #create more bins to estimate error of power law fit
-        num_bins = [middle_num_bins + step*(i-half) for i in range(num_calculations_for_error)]
-        slope_values = []
-        for num_bins in num_bins:
-            min_logM = np.log10(cluster_masses.min())
-            max_logM = np.log10(cluster_masses.max())
-            log_bins = np.linspace(min_logM, max_logM, num_bins + 1)  # Create bins in log scale
-            linear_bins = 10**log_bins  # Convert back to linear scale for histogramming
-            dN, _ = np.histogram(cluster_masses, bins=linear_bins)
+        # num_calculations_for_error = 5
+        # middle_num_bins = int(np.round(np.sqrt(len(cluster_masses))))  # Use square root of the number of clusters for binning
+        # if middle_num_bins < 5:
+        #     middle_num_bins = 5
+        # step = middle_num_bins // num_calculations_for_error
+        # half = num_calculations_for_error // 2
+        # #create more bins to estimate error of power law fit
+        # num_bins = [middle_num_bins + step*(i-half) for i in range(num_calculations_for_error)]
+        # slope_values = []
+        # for num_bins in num_bins:
+        log_masses = np.log10(cluster_masses)  # Convert to log scale for power law fitting
+        q75, q25 = np.percentile(log_masses, [75, 25])
+        iqr = q75 - q25
+        # Use IQR to determine bin_width
+        if iqr > 0:
+            bin_width = 2*iqr*(len(log_masses)**(-1/3))  # Freedman-Diaconis rule
+            num_bins = int(np.ceil((log_masses.max() - log_masses.min()) / bin_width))
+        else:
+            num_bins = 10  # Fallback if IQR is zero
+        num_bins = max(2, min(num_bins, 100))  # Ensure num_bins is between 5 and 50
+        min_logM = np.log10(cluster_masses.min())
+        max_logM = np.log10(cluster_masses.max())
+        log_bins = np.linspace(min_logM, max_logM, num_bins + 1)  # Create bins in log scale
+        linear_bins = 10**log_bins  # Convert back to linear scale for histogramming
+        original_dN, _ = np.histogram(cluster_masses, bins=linear_bins)
+
+        #bootstrap to estimate the error of the power law fit
+        bootstrap_slopes = []
+        for i in range(num_bootstraps):
+            resampled_dN = np.random.poisson(original_dN)
             log_bin_centers = 0.5 * (log_bins[:-1] + log_bins[1:])  # Centers of the log bins
             dM = linear_bins[1:] - linear_bins[:-1]  # Width of the bins in linear scale
             dM[dM==0] = 1  # Avoid division by zero
-            dN_dM = dN/dM
-            mask = (10**log_bin_centers >= 1e4) & (dN>0)  # Filter for Mcl ≥ 1e6 and dN > 0
+            resampled_dN_dM = resampled_dN / dM
+            mask = (10**log_bin_centers >= 1e4) & (resampled_dN > 0)  # Filter for Mcl ≥ 1e6 and dN > 0
             x_fit_data = log_bin_centers[mask]
-            y_fit_data = np.log10(dN_dM[mask])
+            y_fit_data = np.log10(resampled_dN_dM[mask])
             if x_fit_data.size > 1:
-                slope, intercept = np.polyfit(x_fit_data, y_fit_data, 1)
-                x_fit_line = np.linspace(x_fit_data.min(), x_fit_data.max(), 100)
-                y_fit_line = slope*x_fit_line + intercept
-                slope_values.append(slope)
-        if slope_values:
-            slope = np.mean(slope_values)
-            error = np.std(slope_values)
+                slope, _ = np.polyfit(x_fit_data, y_fit_data, 1)
+                bootstrap_slopes.append(slope)
+        
+        if(len(bootstrap_slopes) > 20):
+            slope = np.mean(bootstrap_slopes)
+            error = np.std(bootstrap_slopes)
             results_snapshots.append(final_snapshot_idx)
             results_mean_slopes.append(slope)
             results_slope_errors.append(error)
             print(f"Estimated power law slope for cluster masses at snapshot {final_snapshot_idx}: {slope:.2f} ± {error:.2f}")
-            plt.figure(figsize=(10, 6))
-            plt.scatter(10**log_bin_centers[mask], dN_dM[mask], color='blue', label='Simulation Data', s=10)
-            # For better visualization, you can add error bars (Poisson errors)
-            y_err = (np.sqrt(dN[mask])) / dM[mask]
-            plt.errorbar(10**log_bin_centers[mask], dN_dM[mask], yerr=y_err, fmt='o', color='blue', capsize=5)
-            plt.plot(10**x_fit_line, 10**y_fit_line, 'r--', color='red', label=f"Fit: slope = {slope:.2f}")
-            plt.grid(True, linestyle='--', alpha=0.5, axis='both')
-            plt.legend()    
-            plt.xscale('log')
-            plt.yscale('log')
-            plt.xlabel("Cluster Mass")
-            plt.ylabel("Number of Clusters per delta log(M)")
-            plt.title("Cluster Mass Function")
-            plt.savefig(f"{dir}cluster_mass_function_snapshot{final_snapshot_idx}.png", dpi=200)
-            plt.close()
-            print(f"Saved cluster mass function plot to {dir}cluster_mass_function.png")
-        else:
-            print("Not enough data points to fit a power law for cluster masses at the final snapshot.")
+        # log_bin_centers = 0.5 * (log_bins[:-1] + log_bins[1:])  # Centers of the log bins
+        # dM = linear_bins[1:] - linear_bins[:-1]  # Width of the bins in linear scale
+        # dM[dM==0] = 1  # Avoid division by zero
+        # dN_dM = dN/dM
+        # mask = (10**log_bin_centers >= 1e4) & (dN>0)  # Filter for Mcl ≥ 1e6 and dN > 0
+        # x_fit_data = log_bin_centers[mask]
+        # y_fit_data = np.log10(dN_dM[mask])
+        # if x_fit_data.size > 1:
+        #     slope, intercept = np.polyfit(x_fit_data, y_fit_data, 1)
+        #     x_fit_line = np.linspace(x_fit_data.min(), x_fit_data.max(), 100)
+        #     y_fit_line = slope*x_fit_line + intercept
+        #     slope_values.append(slope)
+        # if slope_values:
+        #     slope = np.mean(slope_values)
+        #     error = np.std(slope_values)
+        #     results_snapshots.append(final_snapshot_idx)
+        #     results_mean_slopes.append(slope)
+        #     results_slope_errors.append(error)
+        #     print(f"Estimated power law slope for cluster masses at snapshot {final_snapshot_idx}: {slope:.2f} ± {error:.2f}")
+        #     plt.figure(figsize=(10, 6))
+        #     plt.scatter(10**log_bin_centers[mask], dN_dM[mask], color='blue', label='Simulation Data', s=10)
+        #     # For better visualization, you can add error bars (Poisson errors)
+        #     y_err = (np.sqrt(dN[mask])) / dM[mask]
+        #     plt.errorbar(10**log_bin_centers[mask], dN_dM[mask], yerr=y_err, fmt='o', color='blue', capsize=5)
+        #     plt.plot(10**x_fit_line, 10**y_fit_line, 'r--', color='red', label=f"Fit: slope = {slope:.2f}")
+        #     plt.grid(True, linestyle='--', alpha=0.5, axis='both')
+        #     plt.legend()    
+        #     plt.xscale('log')
+        #     plt.yscale('log')
+        #     plt.xlabel("Cluster Mass")
+        #     plt.ylabel("Number of Clusters per delta log(M)")
+        #     plt.title("Cluster Mass Function")
+        #     plt.savefig(f"{dir}cluster_mass_function_snapshot{final_snapshot_idx}.png", dpi=200)
+        #     plt.close()
+        #     print(f"Saved cluster mass function plot to {dir}cluster_mass_function.png")
+        # else:
+        #     print("Not enough data points to fit a power law for cluster masses at the final snapshot.")
 
         # Combine the lists into a single (N, 3) array
     output_data = np.vstack((results_snapshots, results_mean_slopes, results_slope_errors)).T
@@ -1224,7 +1258,7 @@ def star_cluster_analysis(snapshot_file_paths, working_directory_path, axisLimit
     plt.tight_layout()
 
     # Save the figure with high resolution
-    plt.savefig(f"{dir}slope_evolution_plot.png", dpi=300)
+    plt.savefig(f"{dir}slope_evolution_plot2.png", dpi=300)
 
     plt.show()
 
