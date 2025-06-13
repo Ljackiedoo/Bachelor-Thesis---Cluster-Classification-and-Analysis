@@ -845,328 +845,388 @@ def star_cluster_analysis(snapshot_file_paths, working_directory_path, axisLimit
     # selected_cluster_ids = random.sample(all_cluster_ids, num_clusters_to_select)
     # burst_clusters = {cluster_id: burst_clusters[cluster_id] for cluster_id in selected_cluster_ids}
 
-    for cluster_idx in burst_clusters:
-        cluster_dir = f"{mass_distributions_dir}cluster_{cluster_idx}/"
-        os.makedirs(cluster_dir, exist_ok=True)
+    # for cluster_idx in burst_clusters:
+    #     cluster_dir = f"{mass_distributions_dir}cluster_{cluster_idx}/"
+    #     os.makedirs(cluster_dir, exist_ok=True)
 
-        fuzzy_start_idx, fuzzy_end_idx = fuzzy_clusters[cluster_idx]
-        astrolink_cluster_ids_in_fuzzycat_cluster = ordering[fuzzy_start_idx:fuzzy_end_idx]
-        # Ensure the path to clusterFileNames.npy is correct
-        clusterFileNames = np.load(f"{working_directory_path}clusterFileNames.npy") 
+    #     fuzzy_start_idx, fuzzy_end_idx = fuzzy_clusters[cluster_idx]
+    #     astrolink_cluster_ids_in_fuzzycat_cluster = ordering[fuzzy_start_idx:fuzzy_end_idx]
+    #     # Ensure the path to clusterFileNames.npy is correct
+    #     clusterFileNames = np.load(f"{working_directory_path}clusterFileNames.npy") 
         
-        burst_snapshot = burst_clusters[cluster_idx]['burst_snapshot']
-        cluster_detected_snapshot = burst_clusters[cluster_idx]['cluster_start_snapshot']
-        cluster_lost_snapshot = burst_clusters[cluster_idx]['cluster_end_snapshot']
-        cluster_detected_time = cluster_detected_snapshot * 13.8 / 2000
-        cluster_lost_time = cluster_lost_snapshot * 13.8 / 2000
-        mass_list = []
-        snap_indices = []
-        # Determine the range of snapshots to iterate over
-        loop_start_snap_idx = max(0, burst_snapshot - 5) 
+    #     burst_snapshot = burst_clusters[cluster_idx]['burst_snapshot']
+    #     cluster_detected_snapshot = burst_clusters[cluster_idx]['cluster_start_snapshot']
+    #     cluster_lost_snapshot = burst_clusters[cluster_idx]['cluster_end_snapshot']
+    #     cluster_detected_time = cluster_detected_snapshot * 13.8 / 2000
+    #     cluster_lost_time = cluster_lost_snapshot * 13.8 / 2000
+    #     mass_list = []
+    #     snap_indices = []
+    #     # Determine the range of snapshots to iterate over
+    #     loop_start_snap_idx = max(0, burst_snapshot - 5) 
         
-        print(f"Processing Cluster {cluster_idx}, Snapshots from {loop_start_snap_idx} up to {n_snapshots-1}")
+    #     print(f"Processing Cluster {cluster_idx}, Snapshots from {loop_start_snap_idx} up to {n_snapshots-1}")
 
-        for snap_idx in range(loop_start_snap_idx, n_snapshots):
-            # snapshot_path and snapshot_name seem to be for diagnostic print only
-            # snapshot_path = snapshot_file_paths[snap_idx] 
-            # snapshot_name = os.path.basename(snapshot_path)
-            # print(f"Processing snapshot {snap_idx+1}/{n_snapshots}: {snapshot_name}") # Original print
+    #     for snap_idx in range(loop_start_snap_idx, n_snapshots):
+    #         # snapshot_path and snapshot_name seem to be for diagnostic print only
+    #         # snapshot_path = snapshot_file_paths[snap_idx] 
+    #         # snapshot_name = os.path.basename(snapshot_path)
+    #         # print(f"Processing snapshot {snap_idx+1}/{n_snapshots}: {snapshot_name}") # Original print
                 
-            star_data = np.load(f"{star_data_dir}star_data_{snap_idx:03d}.npy")
-            star_ids = star_data[:,0]
-            star_masses = star_data[:,2]
+    #         star_data = np.load(f"{star_data_dir}star_data_{snap_idx:03d}.npy")
+    #         star_ids = star_data[:,0]
+    #         star_masses = star_data[:,2]
 
-            # Use a descriptive name for the snapshot index string
-            snapshot_index_str = f"{snap_idx:03d}"
+    #         # Use a descriptive name for the snapshot index string
+    #         snapshot_index_str = f"{snap_idx:03d}"
             
-            # Get AstroLink cluster filenames for this snapshot that belong to the current FuzzyCat cluster
-            # This assumes astrolink_cluster_ids_in_fuzzycat_cluster are indices for clusterFileNames array
-            candidate_filenames = clusterFileNames[astrolink_cluster_ids_in_fuzzycat_cluster]
-            relevant_cluster_filenames = [cfn for cfn in candidate_filenames if cfn.startswith(snapshot_index_str)]
+    #         # Get AstroLink cluster filenames for this snapshot that belong to the current FuzzyCat cluster
+    #         # This assumes astrolink_cluster_ids_in_fuzzycat_cluster are indices for clusterFileNames array
+    #         candidate_filenames = clusterFileNames[astrolink_cluster_ids_in_fuzzycat_cluster]
+    #         relevant_cluster_filenames = [cfn for cfn in candidate_filenames if cfn.startswith(snapshot_index_str)]
             
-            all_clusters_star_ids = []
-            for cluster_filename in relevant_cluster_filenames:
-                # Ensure workingDirectoryPath is correctly cased for Clusters_iord
-                cluster_data_path = os.path.join(workingDirectoryPath, "Clusters_iord", cluster_filename)
-                try:
-                    cluster_star_ids = np.load(cluster_data_path)
-                    all_clusters_star_ids.append(cluster_star_ids)
-                except FileNotFoundError:
-                    print(f"Warning: Cluster file {cluster_data_path} not found for snap {snap_idx}. Skipping this file.")
-                    continue
+    #         all_clusters_star_ids = []
+    #         for cluster_filename in relevant_cluster_filenames:
+    #             # Ensure workingDirectoryPath is correctly cased for Clusters_iord
+    #             cluster_data_path = os.path.join(workingDirectoryPath, "Clusters_iord", cluster_filename)
+    #             try:
+    #                 cluster_star_ids = np.load(cluster_data_path)
+    #                 all_clusters_star_ids.append(cluster_star_ids)
+    #             except FileNotFoundError:
+    #                 print(f"Warning: Cluster file {cluster_data_path} not found for snap {snap_idx}. Skipping this file.")
+    #                 continue
 
-            if all_clusters_star_ids:
-                member_ids = np.concatenate(all_clusters_star_ids)
-                member_ids = np.unique(member_ids) # Important if stars can be in multiple sub-clusters
-            else:
-                member_ids = np.array([], dtype=int)
+    #         if all_clusters_star_ids:
+    #             member_ids = np.concatenate(all_clusters_star_ids)
+    #             member_ids = np.unique(member_ids) # Important if stars can be in multiple sub-clusters
+    #         else:
+    #             member_ids = np.array([], dtype=int)
             
-            star_masses_in_cluster = star_masses[np.isin(star_ids, member_ids)]
-            mass_list.append(star_masses_in_cluster)
-            snap_indices.append(snap_idx)
+    #         star_masses_in_cluster = star_masses[np.isin(star_ids, member_ids)]
+    #         mass_list.append(star_masses_in_cluster)
+    #         snap_indices.append(snap_idx)
 
-            all_snapshots_masses[cluster_idx][snap_idx] = star_masses_in_cluster
+    #         all_snapshots_masses[cluster_idx][snap_idx] = star_masses_in_cluster
 
-        # --- New Plotting Section ---
+    #     # --- New Plotting Section ---
         
-        # Filter out snapshots where no stars were found in the cluster for this specific mass_list
-        mass_list_with_data = []
-        snap_indices_with_data = []
-        for m, s_idx in zip(mass_list, snap_indices):
-            if len(m) > 0:
-                mass_list_with_data.append(m)
-                snap_indices_with_data.append(s_idx)
+    #     # Filter out snapshots where no stars were found in the cluster for this specific mass_list
+    #     mass_list_with_data = []
+    #     snap_indices_with_data = []
+    #     for m, s_idx in zip(mass_list, snap_indices):
+    #         if len(m) > 0:
+    #             mass_list_with_data.append(m)
+    #             snap_indices_with_data.append(s_idx)
 
-        if not mass_list_with_data:
-            print(f"  → No stars with mass data found for Cluster {cluster_idx} across any processed snapshot. Skipping plots.")
-            plt.close('all') # Close any stray figures
-            continue
+    #     if not mass_list_with_data:
+    #         print(f"  → No stars with mass data found for Cluster {cluster_idx} across any processed snapshot. Skipping plots.")
+    #         plt.close('all') # Close any stray figures
+    #         continue
 
-        # Determine common bins for histograms based on all mass data for this cluster
-        all_masses_for_bins = np.concatenate(mass_list_with_data)
-        # This check is mostly redundant due to `if not mass_list_with_data` but good for safety:
-        if len(all_masses_for_bins) == 0: 
-            print(f"  → Concatenated all_masses is empty for Cluster {cluster_idx} (should not happen). Skipping plots.")
-            plt.close('all')
-            continue
+    #     # Determine common bins for histograms based on all mass data for this cluster
+    #     all_masses_for_bins = np.concatenate(mass_list_with_data)
+    #     # This check is mostly redundant due to `if not mass_list_with_data` but good for safety:
+    #     if len(all_masses_for_bins) == 0: 
+    #         print(f"  → Concatenated all_masses is empty for Cluster {cluster_idx} (should not happen). Skipping plots.")
+    #         plt.close('all')
+    #         continue
 
-        min_m_overall, max_m_overall = np.min(all_masses_for_bins), np.max(all_masses_for_bins)
+    #     min_m_overall, max_m_overall = np.min(all_masses_for_bins), np.max(all_masses_for_bins)
         
-        # Define plot range for mass axis; handle cases with single mass value or very narrow range
-        if np.isclose(min_m_overall, max_m_overall):
-            offset = 0.5 if np.isclose(min_m_overall, 0.0) else 0.1 * abs(min_m_overall)
-            if np.isclose(offset, 0.0): offset = 0.5 # Ensure offset is non-zero (e.g. if min_m_overall is extremely small)
-            min_m_plot = min_m_overall - offset
-            max_m_plot = max_m_overall + offset
-        else:
-            min_m_plot = min_m_overall
-            max_m_plot = max_m_overall
+    #     # Define plot range for mass axis; handle cases with single mass value or very narrow range
+    #     if np.isclose(min_m_overall, max_m_overall):
+    #         offset = 0.5 if np.isclose(min_m_overall, 0.0) else 0.1 * abs(min_m_overall)
+    #         if np.isclose(offset, 0.0): offset = 0.5 # Ensure offset is non-zero (e.g. if min_m_overall is extremely small)
+    #         min_m_plot = min_m_overall - offset
+    #         max_m_plot = max_m_overall + offset
+    #     else:
+    #         min_m_plot = min_m_overall
+    #         max_m_plot = max_m_overall
 
-        # Global bins for all plots for this cluster (30 bins, 31 edges)
-        bins = np.linspace(min_m_plot, max_m_plot, 31) 
+    #     # Global bins for all plots for this cluster (30 bins, 31 edges)
+    #     bins = np.linspace(min_m_plot, max_m_plot, 31) 
 
-        # Fallback if bin creation fails (e.g., min_m_plot and max_m_plot are still identical)
-        if len(np.unique(bins)) < 2: 
-            print(f"Warning: Bin edges are not unique for cluster {cluster_idx} (min_m={min_m_overall}, max_m={max_m_overall}). Using fallback bins.")
-            # Try a fixed offset if the relative one failed
-            bins = np.linspace(min_m_overall - 0.5, min_m_overall + 0.5, 31) 
-            if len(np.unique(bins)) < 2: # If still failing (highly pathological)
-                bins = np.linspace(-1, 1, 31) # Absolute fallback range
-                print(f"ERROR: Pathological bin calculation for cluster {cluster_idx}. Using default bins [-1, 1].")
+    #     # Fallback if bin creation fails (e.g., min_m_plot and max_m_plot are still identical)
+    #     if len(np.unique(bins)) < 2: 
+    #         print(f"Warning: Bin edges are not unique for cluster {cluster_idx} (min_m={min_m_overall}, max_m={max_m_overall}). Using fallback bins.")
+    #         # Try a fixed offset if the relative one failed
+    #         bins = np.linspace(min_m_overall - 0.5, min_m_overall + 0.5, 31) 
+    #         if len(np.unique(bins)) < 2: # If still failing (highly pathological)
+    #             bins = np.linspace(-1, 1, 31) # Absolute fallback range
+    #             print(f"ERROR: Pathological bin calculation for cluster {cluster_idx}. Using default bins [-1, 1].")
         
-        # Determine snapshot range for titles from actual data plotted
-        title_snap_min = snap_indices_with_data[0]
-        title_snap_max = snap_indices_with_data[-1]
+    #     # Determine snapshot range for titles from actual data plotted
+    #     title_snap_min = snap_indices_with_data[0]
+    #     title_snap_max = snap_indices_with_data[-1]
 
-        # --- Plot 1: 2D Heatmap of Mass Distribution over Time (Axes Swapped) ---
+    #     # --- Plot 1: 2D Heatmap of Mass Distribution over Time (Axes Swapped) ---
     
-        # Calculate histogram data for each snapshot
-        # hist_data_list will store 1D arrays of histogram counts (densities)
-        hist_data_list = []
-        for current_masses in mass_list_with_data: # Already filtered for non-empty lists
-            counts, _ = np.histogram(current_masses, bins=bins, density=True)
-            hist_data_list.append(counts)
+    #     # Calculate histogram data for each snapshot
+    #     # hist_data_list will store 1D arrays of histogram counts (densities)
+    #     hist_data_list = []
+    #     for current_masses in mass_list_with_data: # Already filtered for non-empty lists
+    #         counts, _ = np.histogram(current_masses, bins=bins, density=True)
+    #         hist_data_list.append(counts)
         
-        if not hist_data_list: 
-            print(f"  → No histogram data to plot 2D heatmap for Cluster {cluster_idx}.")
-        else:
-            # Convert list of 1D arrays to a 2D numpy array.
-            # Each row corresponds to a snapshot, each column to a mass bin.
-            # So, hist_data_2d has shape (number_of_snapshots, number_of_mass_bins)
-            hist_data_2d_original_orientation = np.array(hist_data_list)
+    #     if not hist_data_list: 
+    #         print(f"  → No histogram data to plot 2D heatmap for Cluster {cluster_idx}.")
+    #     else:
+    #         # Convert list of 1D arrays to a 2D numpy array.
+    #         # Each row corresponds to a snapshot, each column to a mass bin.
+    #         # So, hist_data_2d has shape (number_of_snapshots, number_of_mass_bins)
+    #         hist_data_2d_original_orientation = np.array(hist_data_list)
             
-            plt.figure(figsize=(10, 7)) # You might adjust figsize, e.g., (12, 6) if many snapshots
+    #         plt.figure(figsize=(10, 7)) # You might adjust figsize, e.g., (12, 6) if many snapshots
             
-            # Define mesh edges for pcolormesh.
-            # For the swapped axes:
-            # X-axis will be Snapshot Index
-            # Y-axis will be Stellar Mass
+    #         # Define mesh edges for pcolormesh.
+    #         # For the swapped axes:
+    #         # X-axis will be Snapshot Index
+    #         # Y-axis will be Stellar Mass
             
-            # x_mesh_edges: Edges for the new X-axis (Snapshot Index).
-            # Corresponds to the columns of the transposed data array.
-            x_mesh_edges = np.arange(len(snap_indices_with_data) + 1) 
+    #         # x_mesh_edges: Edges for the new X-axis (Snapshot Index).
+    #         # Corresponds to the columns of the transposed data array.
+    #         x_mesh_edges = np.arange(len(snap_indices_with_data) + 1) 
             
-            # y_mesh_edges: Edges for the new Y-axis (Stellar Mass).
-            # Corresponds to the rows of the transposed data array. `bins` are already edges.
-            y_mesh_edges = bins 
+    #         # y_mesh_edges: Edges for the new Y-axis (Stellar Mass).
+    #         # Corresponds to the rows of the transposed data array. `bins` are already edges.
+    #         y_mesh_edges = bins 
             
-            # Prepare data for pcolormesh:
-            # pcolormesh(X_edges, Y_edges, C_values) expects C_values[i,j] to map to Y_edges[i] and X_edges[j].
-            # If Y is mass (rows) and X is snapshots (columns), C needs shape (num_mass_bins, num_snapshots).
-            # So, we transpose hist_data_2d_original_orientation.
-            data_for_pcolormesh = hist_data_2d_original_orientation.T
+    #         # Prepare data for pcolormesh:
+    #         # pcolormesh(X_edges, Y_edges, C_values) expects C_values[i,j] to map to Y_edges[i] and X_edges[j].
+    #         # If Y is mass (rows) and X is snapshots (columns), C needs shape (num_mass_bins, num_snapshots).
+    #         # So, we transpose hist_data_2d_original_orientation.
+    #         data_for_pcolormesh = hist_data_2d_original_orientation.T
 
-            plt.pcolormesh(
-                x_mesh_edges,        # Edges for Snapshot Index axis
-                y_mesh_edges,        # Edges for Stellar Mass axis
-                data_for_pcolormesh, # Transposed data, shape (num_mass_bins, num_snapshots)
-                cmap='viridis', 
-                shading='flat', 
-                vmin=0  # Density is non-negative
-            )
-            plt.colorbar(label="Normalized Count (density)")
+    #         plt.pcolormesh(
+    #             x_mesh_edges,        # Edges for Snapshot Index axis
+    #             y_mesh_edges,        # Edges for Stellar Mass axis
+    #             data_for_pcolormesh, # Transposed data, shape (num_mass_bins, num_snapshots)
+    #             cmap='viridis', 
+    #             shading='flat', 
+    #             vmin=0  # Density is non-negative
+    #         )
+    #         plt.colorbar(label="Normalized Count (density)")
             
-            # Set labels for the swapped axes
-            plt.xlabel("Snapshot Index")
-            plt.ylabel("Stellar Population Mass [Msol]")
+    #         # Set labels for the swapped axes
+    #         plt.xlabel("Snapshot Index")
+    #         plt.ylabel("Stellar Population Mass [Msol]")
             
-            # Set x-axis ticks to actual snapshot numbers.
-            # The logic previously used for y-axis snapshot ticks is now applied to the x-axis.
-            # tick_positions_x are centers of the pcolormesh cells along the new x-axis (snapshots).
-            tick_positions_x = x_mesh_edges[:-1] + 0.5 
-            tick_labels_x = [str(s) for s in snap_indices_with_data]
+    #         # Set x-axis ticks to actual snapshot numbers.
+    #         # The logic previously used for y-axis snapshot ticks is now applied to the x-axis.
+    #         # tick_positions_x are centers of the pcolormesh cells along the new x-axis (snapshots).
+    #         tick_positions_x = x_mesh_edges[:-1] + 0.5 
+    #         tick_labels_x = [str(s) for s in snap_indices_with_data]
             
-            # Reduce number of x-ticks if too many snapshots to display clearly
-            if len(snap_indices_with_data) > 20: # Adjust this threshold as needed
-                num_ticks_display = 10 
-                step = max(1, len(snap_indices_with_data) // num_ticks_display)
-                plt.xticks(tick_positions_x[::step], tick_labels_x[::step])
-            else:
-                plt.xticks(tick_positions_x, tick_labels_x)
+    #         # Reduce number of x-ticks if too many snapshots to display clearly
+    #         if len(snap_indices_with_data) > 20: # Adjust this threshold as needed
+    #             num_ticks_display = 10 
+    #             step = max(1, len(snap_indices_with_data) // num_ticks_display)
+    #             plt.xticks(tick_positions_x[::step], tick_labels_x[::step])
+    #         else:
+    #             plt.xticks(tick_positions_x, tick_labels_x)
 
-            # Y-axis (Mass) ticks can often be left to Matplotlib's default.
-            # If you need to customize them, you could use, for example:
-            # from matplotlib.ticker import MaxNLocator
-            # plt.gca().yaxis.set_major_locator(MaxNLocator(nbins=6)) # Show approx 6 ticks on mass axis
+    #         # Y-axis (Mass) ticks can often be left to Matplotlib's default.
+    #         # If you need to customize them, you could use, for example:
+    #         # from matplotlib.ticker import MaxNLocator
+    #         # plt.gca().yaxis.set_major_locator(MaxNLocator(nbins=6)) # Show approx 6 ticks on mass axis
 
-            plt.title(f"Cluster {cluster_idx}: Mass Distribution Evolution, Snapshots {title_snap_min}→{title_snap_max}")
-            plt.tight_layout()
+    #         plt.title(f"Cluster {cluster_idx}: Mass Distribution Evolution, Snapshots {title_snap_min}→{title_snap_max}")
+    #         plt.tight_layout()
             
-            # Save the figure with the original heatmap filename, effectively replacing it
-            outfn_heatmap = os.path.join(cluster_dir, f"mass_dist_heatmap.png")
-            plt.savefig(outfn_heatmap, dpi=200)
-            plt.close() # Close the heatmap figure
-            print(f"  → Saved heatmap (axes swapped) for Cluster {cluster_idx} at {outfn_heatmap}")
+    #         # Save the figure with the original heatmap filename, effectively replacing it
+    #         outfn_heatmap = os.path.join(cluster_dir, f"mass_dist_heatmap.png")
+    #         plt.savefig(outfn_heatmap, dpi=200)
+    #         plt.close() # Close the heatmap figure
+    #         print(f"  → Saved heatmap (axes swapped) for Cluster {cluster_idx} at {outfn_heatmap}")
 
-        # --- Plot 2: Summary Statistics (Mean, Median, IQR) over Time ---
-        # Calculate statistics only if there's data
-        if not mass_list_with_data: # Should be caught earlier, but as a safeguard
-            print(f"  → No data to plot summary statistics for Cluster {cluster_idx}.")
-        else:
-            mean_masses = [np.mean(m) for m in mass_list_with_data]
-            median_masses = [np.median(m) for m in mass_list_with_data]
-            q25_masses = [np.percentile(m, 25) for m in mass_list_with_data]
-            q75_masses = [np.percentile(m, 75) for m in mass_list_with_data]
+    #     # --- Plot 2: Summary Statistics (Mean, Median, IQR) over Time ---
+    #     # Calculate statistics only if there's data
+    #     if not mass_list_with_data: # Should be caught earlier, but as a safeguard
+    #         print(f"  → No data to plot summary statistics for Cluster {cluster_idx}.")
+    #     else:
+    #         mean_masses = [np.mean(m) for m in mass_list_with_data]
+    #         median_masses = [np.median(m) for m in mass_list_with_data]
+    #         q25_masses = [np.percentile(m, 25) for m in mass_list_with_data]
+    #         q75_masses = [np.percentile(m, 75) for m in mass_list_with_data]
 
-            plt.figure(figsize=(10, 6))
-            plt.plot(snap_indices_with_data, mean_masses, label='Mean Mass', marker='o', linestyle='-')
-            plt.plot(snap_indices_with_data, median_masses, label='Median Mass', marker='s', linestyle='--')
-            # Shaded region for IQR
-            plt.fill_between(snap_indices_with_data, q25_masses, q75_masses, alpha=0.2, label='IQR (25th-75th percentile)', color='gray')
-            plt.axvline(x=cluster_detected_snapshot, color='purple', linestyle='--', label='Cluster detected')
-            plt.axvline(x=cluster_lost_snapshot, color='orange', linestyle='--', label='Cluster lost')
+    #         plt.figure(figsize=(10, 6))
+    #         plt.plot(snap_indices_with_data, mean_masses, label='Mean Mass', marker='o', linestyle='-')
+    #         plt.plot(snap_indices_with_data, median_masses, label='Median Mass', marker='s', linestyle='--')
+    #         # Shaded region for IQR
+    #         plt.fill_between(snap_indices_with_data, q25_masses, q75_masses, alpha=0.2, label='IQR (25th-75th percentile)', color='gray')
+    #         plt.axvline(x=cluster_detected_snapshot, color='purple', linestyle='--', label='Cluster detected')
+    #         plt.axvline(x=cluster_lost_snapshot, color='orange', linestyle='--', label='Cluster lost')
 
-            plt.xlabel("Snapshot Index")
-            plt.ylabel("Stellar Mass [Msol]")
-            plt.title(f"Cluster {cluster_idx}: Mass Statistics Evolution, Snapshots {title_snap_min}→{title_snap_max}")
-            plt.legend()
-            plt.grid(True, linestyle=':', alpha=0.7)
-            plt.tight_layout()
+    #         plt.xlabel("Snapshot Index")
+    #         plt.ylabel("Stellar Mass [Msol]")
+    #         plt.title(f"Cluster {cluster_idx}: Mass Statistics Evolution, Snapshots {title_snap_min}→{title_snap_max}")
+    #         plt.legend()
+    #         plt.grid(True, linestyle=':', alpha=0.7)
+    #         plt.tight_layout()
             
-            outfn_stats = os.path.join(cluster_dir, f"mass_stats_evolution.png")
-            plt.savefig(outfn_stats, dpi=200)
-            plt.close() # Close the statistics figure
-            print(f"  → Saved mass statistics plot for Cluster {cluster_idx} at {outfn_stats}")
-    #save all snapshots' masses for later use
-    np.save(f"{mass_distributions_dir}all_snapshots_masses.npy", all_snapshots_masses, allow_pickle=True)
+    #         outfn_stats = os.path.join(cluster_dir, f"mass_stats_evolution.png")
+    #         plt.savefig(outfn_stats, dpi=200)
+    #         plt.close() # Close the statistics figure
+    #         print(f"  → Saved mass statistics plot for Cluster {cluster_idx} at {outfn_stats}")
+    # #save all snapshots' masses for later use
+    # np.save(f"{mass_distributions_dir}all_snapshots_masses.npy", all_snapshots_masses, allow_pickle=True)
 
     # End of the loop for cluster_idx
 
     all_snapshot_masses = np.load(f"{mass_distributions_dir}all_snapshots_masses.npy", allow_pickle=True).item()
+    dir = f"{mass_distributions_dir}power_law_analysis_beta_dist/"
+    os.makedirs(dir, exist_ok=True)
     nonempty_clusters = [c for c in all_snapshot_masses if any(len(m) > 0 for m in all_snapshot_masses[c].values())]
-    final_snapshot_idx = 30
-    cluster_masses_at_final_snap = []
-    #---- Mass power law analysis ---
-    for cluster_idx in nonempty_clusters:
-        # first_snapshot = burst_clusters[cluster_idx]['cluster_start_snapshot']
-        # last_snapshot = burst_clusters[cluster_idx]['cluster_end_snapshot']
-        # middle_snapshot = (first_snapshot + last_snapshot) // 2
+    results_snapshots = []
+    results_mean_slopes = []
+    results_slope_errors = []
+    for final_snapshot_idx in range(n_snapshots):
+        cluster_masses_at_final_snap = []
+        #---- Mass power law analysis ---
+        for cluster_idx in nonempty_clusters:
+            snap_masses = all_snapshot_masses[cluster_idx].get(final_snapshot_idx, np.array([]))
+            if snap_masses.size > 0:
+                Mcl = np.sum(snap_masses)
+                cluster_masses_at_final_snap.append(Mcl)
+        cluster_masses = np.array(cluster_masses_at_final_snap)
+        print(f"Found a total of {len(cluster_masses)} clusters for initial mass function at snapshot {final_snapshot_idx}.")
+        if len(cluster_masses) < 20:
+            print(f"Not enough clusters found for snapshot {final_snapshot_idx}. Skipping power law analysis.")
+            continue
+        num_calculations_for_error = 5
+        middle_num_bins = int(np.round(np.sqrt(len(cluster_masses))))  # Use square root of the number of clusters for binning
+        if middle_num_bins < 5:
+            middle_num_bins = 5
+        step = middle_num_bins // num_calculations_for_error
+        half = num_calculations_for_error // 2
+        #create more bins to estimate error of power law fit
+        num_bins = [middle_num_bins + step*(i-half) for i in range(num_calculations_for_error)]
+        slope_values = []
+        for num_bins in num_bins:
+            min_logM = np.log10(cluster_masses.min())
+            max_logM = np.log10(cluster_masses.max())
+            log_bins = np.linspace(min_logM, max_logM, num_bins + 1)  # Create bins in log scale
+            linear_bins = 10**log_bins  # Convert back to linear scale for histogramming
+            dN, _ = np.histogram(cluster_masses, bins=linear_bins)
+            log_bin_centers = 0.5 * (log_bins[:-1] + log_bins[1:])  # Centers of the log bins
+            dM = linear_bins[1:] - linear_bins[:-1]  # Width of the bins in linear scale
+            dM[dM==0] = 1  # Avoid division by zero
+            dN_dM = dN/dM
+            mask = (10**log_bin_centers >= 1e4) & (dN>0)  # Filter for Mcl ≥ 1e6 and dN > 0
+            x_fit_data = log_bin_centers[mask]
+            y_fit_data = np.log10(dN_dM[mask])
+            if x_fit_data.size > 1:
+                slope, intercept = np.polyfit(x_fit_data, y_fit_data, 1)
+                x_fit_line = np.linspace(x_fit_data.min(), x_fit_data.max(), 100)
+                y_fit_line = slope*x_fit_line + intercept
+                slope_values.append(slope)
+        if slope_values:
+            slope = np.mean(slope_values)
+            error = np.std(slope_values)
+            results_snapshots.append(final_snapshot_idx)
+            results_mean_slopes.append(slope)
+            results_slope_errors.append(error)
+            print(f"Estimated power law slope for cluster masses at snapshot {final_snapshot_idx}: {slope:.2f} ± {error:.2f}")
+            plt.figure(figsize=(10, 6))
+            plt.scatter(10**log_bin_centers[mask], dN_dM[mask], color='blue', label='Simulation Data', s=10)
+            # For better visualization, you can add error bars (Poisson errors)
+            y_err = (np.sqrt(dN[mask])) / dM[mask]
+            plt.errorbar(10**log_bin_centers[mask], dN_dM[mask], yerr=y_err, fmt='o', color='blue', capsize=5)
+            plt.plot(10**x_fit_line, 10**y_fit_line, 'r--', color='red', label=f"Fit: slope = {slope:.2f}")
+            plt.grid(True, linestyle='--', alpha=0.5, axis='both')
+            plt.legend()    
+            plt.xscale('log')
+            plt.yscale('log')
+            plt.xlabel("Cluster Mass")
+            plt.ylabel("Number of Clusters per delta log(M)")
+            plt.title("Cluster Mass Function")
+            plt.savefig(f"{dir}cluster_mass_function_snapshot{final_snapshot_idx}.png", dpi=200)
+            plt.close()
+            print(f"Saved cluster mass function plot to {dir}cluster_mass_function.png")
+        else:
+            print("Not enough data points to fit a power law for cluster masses at the final snapshot.")
 
-        # snapshots_to_plot = [first_snapshot, middle_snapshot, last_snapshot]
-        # colors = ['blue', 'orange', 'green']
-        # labels = ['Early', 'Middle', 'Late']
-        
-        
-        # for snap_idx in range(n_snapshots):
-        #     snap_masses = all_snapshot_masses[cluster_idx].get(snap_idx, np.array([]))
-        #     if snap_masses.size > 0:
-        #         Mcl = np.sum(snap_masses)  # Total mass of the cluster at this snapshot
-        #         cluster_masses.append(Mcl)
+        # Combine the lists into a single (N, 3) array
+    output_data = np.vstack((results_snapshots, results_mean_slopes, results_slope_errors)).T
 
-        snap_masses = all_snapshot_masses[cluster_idx].get(final_snapshot_idx, np.array([]))
-        if snap_masses.size > 0:
-            Mcl = np.sum(snap_masses)
-            cluster_masses_at_final_snap.append(Mcl)
-    cluster_masses = np.array(cluster_masses_at_final_snap)
+    # Define a header for the text file
+    header = "Snapshot_Index  Mean_Slope_alpha  StdDev_Error"
 
-    logM = np.log10(cluster_masses)
-    num_bins = 20
-    dN, bin_edges = np.histogram(logM, bins=num_bins)
-    dlogM = bin_edges[1:] - bin_edges[:-1]      # all equal if np.linspace
-    dN_dlogM  = dN / dlogM
-    centers = 0.5*(bin_edges[:-1] + bin_edges[1:])
-    m_centers = 10**centers  # Convert centers back to linear scale
-    
-    mask = (m_centers >= 1e6) & (dN_dlogM > 0)  # Filter for Mcl ≥ 1e6 and dN > 0
-    x = centers[mask]          # this is log10(Mcl)
-    y = np.log10(dN_dlogM[mask])     # log10(N per bin)
-    if x.size > 1:
-        slope, intercept = np.polyfit(x, y, 1)
-        x_fit = np.linspace(x.min(), x.max(), 100)
-        y_fit = slope*x_fit + intercept
-        plt.figure(figsize=(10, 6))
-        plt.scatter(m_centers, dN_dlogM, s=20)
-        plt.plot(10**x_fit, 10**y_fit, '--', label=f"fit tail (M≥1e6) slope = {slope:.2f}")
-        plt.legend()
-        plt.xscale('log')
-        plt.yscale('log')
-        plt.xlabel("Cluster Mass")
-        plt.ylabel("Number of Clusters per delta log(M)")
-        plt.title("Cluster Mass Function")
-        plt.savefig(f"{mass_distributions_dir}cluster_mass_function.png", dpi=200)
-        plt.close()
-        print(f"Saved cluster mass function plot to {mass_distributions_dir}cluster_mass_function.png")
-    else:
-        print("Not enough data points to fit a power law for cluster masses at the final snapshot.")
-            
-            # min_mass = np.min(snap_masses)
-            # log_m_min = np.log10(min_mass if min_mass > 0 else 1e-10)  # Avoid log(0)
-            # log_m_max = np.log10(np.max(snap_masses))#
-            # num_bins = 100
-            # bin_edges_log = np.linspace(log_m_min, log_m_max, num_bins +1)  # 100 bins for log-mass histogra
-            # bin_edges = 10**bin_edges_log
+    # Save using np.savetxt
+    output_filename = f"{dir}slope_evolution.txt"
+    np.savetxt(output_filename, output_data, header=header, fmt="%-15d %-18.4f %-18.4f")
 
-            # dN, _ = np.histogram(snap_masses, bins=bin_edges)
-            # dm = np.diff(bin_edges)
-            # dN_per_dm = np.zeros_like(dm, dtype=float)
-            # valid_dm = dm > 0  # Avoid division by zero
-            # dN_per_dm[valid_dm] = dN[valid_dm] / dm[valid_dm]
-            
+    print(f"\nSaved slope evolution data to {output_filename}")
 
-            # m_center = np.sqrt(bin_edges[:-1] * bin_edges[1:])  # Geometric mean of bin edges
-            # valid_points_for_log = (dN>0) & (m_center > 0) & (dN_per_dm > 0)  # Ensure we only plot valid points
-            # log_m_center = np.log10(m_center[valid_points_for_log])
-            # log_dN_per_dm = np.log10(dN_per_dm[valid_points_for_log])
+        # --- 1. Load the Data ---
+    data_path = f"{dir}slope_evolution.txt"
+    try:
+        data = np.loadtxt(data_path)
+    except FileNotFoundError:
+        print(f"Error: Data file not found at {data_path}")
+        # You might want to exit or handle this error appropriately
+        exit()
 
-            # coef = np.polyfit(log_m_center, log_dN_per_dm, 1)
-            # slope, intercept = coef
+    # Unpack the columns
+    snapshots = data[:, 0]
+    slopes = data[:, 1]
+    errors = data[:, 2]
 
-            # x_fit = np.linspace(log_m_center.min(), log_m_center.max(), 100)
-            # y_fit = slope * x_fit + intercept
+    # --- 2. Create a High-Quality Plot ---
 
-            # plt.figure(figsize=(8, 6))
-            # plt.scatter(log_m_center, log_dN_per_dm, color=color, label=f"{label} Snapshot {snap_idx:03d}", s=10)
-            # plt.plot(x_fit, y_fit, linestyle='--', label=f"fit: slope = {slope:.2f}")
-            # plt.xlabel("log10(Mass) [Msol]")
-            # plt.ylabel("log10(dN/dm) [Msol^-1]")
-            # plt.title(f"Mass Distribution Power Law for Cluster {cluster_idx} at Snapshot {snap_idx:03d}")
-            # plt.legend()
-            # plt.grid(True, linestyle='--', alpha=0.5)
-            # plt.tight_layout()
-            # plt.savefig(f"{mass_distributions_dir}cluster_{cluster_idx}_power_law_snapshot_{snap_idx:03d}.png", dpi=200)
-            # plt.close()
-            # print(f"Saved power law plot for Cluster {cluster_idx} at Snapshot {snap_idx:03d}")
+    # You can set a style for a professional look. 'seaborn-v0_8-poster' or 'seaborn-v0_8-whitegrid' are good choices.
+    plt.style.use('seaborn-v0_8-whitegrid') 
 
+    fig, ax = plt.subplots(figsize=(12, 7))
+
+    # --- Plot the main trend line ---
+    # Use a solid line with small, subtle markers.
+    ax.plot(snapshots, slopes, 
+            marker='o',          # Small circle markers at each data point
+            markersize=5,        # Control the size of the markers
+            linestyle='-',       # A solid line connecting the points
+            color='C0',          # Use the default blue color
+            label='Slope (α)')
+
+    # --- Plot the shaded error region ---
+    # This is the key function: plt.fill_between
+    ax.fill_between(snapshots,           # X-values
+                    slopes - errors,     # The lower boundary of the shaded region
+                    slopes + errors,     # The upper boundary of the shaded region
+                    color='C0',          # Match the line color
+                    alpha=0.2,           # Use transparency to make it subtle
+                    label='Binning Uncertainty')
+
+    # --- Add a reference line for the theoretical initial slope ---
+    ax.axhline(-2.0, 
+            color='red', 
+            linestyle='--', 
+            linewidth=2,
+            label='Theoretical Slope (α = -2.0)')
+
+    # --- 3. Final Touches for Publication Quality ---
+
+    # Set labels and title with a slightly larger font size for readability
+    ax.set_xlabel("Snapshot Index", fontsize=14)
+    ax.set_ylabel("Mass Function Slope (α)", fontsize=14)
+    ax.set_title("Evolution of the Cluster Mass Function Slope", fontsize=16, fontweight='bold')
+
+    # Adjust tick label sizes
+    ax.tick_params(axis='both', which='major', labelsize=12)
+
+    # Set logical limits for the axes to focus on the data
+    ax.set_xlim(snapshots.min() - 1, snapshots.max() + 1)
+    ax.set_ylim(-2.1, -0.5) # Adjust this based on your data's range
+
+    # Create a clean and well-placed legend
+    ax.legend(fontsize=12, loc='lower right')
+
+    # Ensure the layout is tight
+    plt.tight_layout()
+
+    # Save the figure with high resolution
+    plt.savefig(f"{dir}slope_evolution_plot.png", dpi=300)
+
+    plt.show()
 
 
 def fast_identify_burst_clusters(snapshot_file_paths, working_directory_path, analysis_path, star_data_dir, fuzzy_cluster_threshold_ranges, threshold_fraction=0.2):
