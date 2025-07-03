@@ -1252,11 +1252,16 @@ def power_law_analysis(power_law_analysis_dir, n_snapshots, cluster_masses):
             else:
                 num_bins = 10  # Fallback if IQR is zero
             num_bins = max(5, min(num_bins, 100))  # Ensure num_bins is between 5 and 100
-            #num_bins = 10  # Ensure num_bins is between 5 and 50
+            #num_bins = 10
+
+
             min_logM = np.log10(cluster_masses.min())
             max_logM = np.log10(cluster_masses.max())
+
             log_bins = np.linspace(min_logM, max_logM, num_bins + 1)  # Create bins in log scale
+
             linear_bins = 10**log_bins  # Convert back to linear scale for histogramming
+
             original_dN, _ = np.histogram(cluster_masses, bins=linear_bins)
             
             #bootstrap to estimate the error of the power law fit
@@ -1265,13 +1270,21 @@ def power_law_analysis(power_law_analysis_dir, n_snapshots, cluster_masses):
             dN_dM_array = []
             for i in range(num_bootstraps):
                 resampled_dN = np.random.poisson(original_dN)
+
                 log_bin_centers = 0.5 * (log_bins[:-1] + log_bins[1:])  # Centers of the log bins
+
                 dM = linear_bins[1:] - linear_bins[:-1]  # Width of the bins in linear scale
+
                 dM[dM==0] = 1e-9  # Avoid division by zero
+
                 resampled_dN_dM = resampled_dN / dM
+
                 mask = (10**log_bin_centers >= 1e4) & (resampled_dN > 0)  # Filter for Mcl ≥ 1e4 and dN > 0
+
                 x_fit_data = log_bin_centers[mask]
+
                 y_fit_data = np.log10(resampled_dN_dM[mask])
+                
                 if x_fit_data.size > 1:
                     slope, y_intercept = np.polyfit(x_fit_data, y_fit_data, 1)
                     bootstrap_slopes.append(slope)
@@ -1566,7 +1579,7 @@ def lifetime_analysis(clusters, masses, dir, star_analysis = False):
         x_all_ticks = x_ticks_linear + x_ticks_log
 
     #plot the spatial distribution of cluster lifetimes
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(10, 7))
     sns.scatterplot(data=combined_df, x='median_radial_distance', y='median_vertical_distance', hue='Lifetime (Gyr)',  palette='viridis', size='Lifetime (Gyr)', sizes=(20, 200), legend='brief')
     plt.title("Spatial Distribution of Cluster Lifetimes")
     plt.xlabel("Median Radial Distance (kpc)")
@@ -2037,7 +2050,7 @@ def get_cluster_data(snapshot_file_paths, working_directory_path, analysis_dir, 
     """
     Load and save all data for the clusters in csv format."""
     csv_filepath = os.path.join(analysis_dir, "all_cluster_metrics.csv")
-    header_columns = ['cluster_idx', 'cluster_start_snapshot', 'cluster_end_snapshot', 'star_count', 'median_age', 'median_radial_distance', 'median_z_distance', 'median_iron', 'median_oxygen', 't25_t75', 'burst_snapshot', 'cluster_structure_age', 'burst_cluster']
+    header_columns = ['cluster_idx', 'cluster_start_snapshot', 'cluster_end_snapshot', 'star_count', 'median_age', 'std_age', 'median_radial_distance', 'median_z_distance', 'median_iron', 'median_oxygen', 't25_t75', 'burst_snapshot', 'cluster_structure_age', 'burst_cluster']
     processed_cluster_ids = set()
     file_exists = os.path.exists(csv_filepath)
 
@@ -2106,6 +2119,7 @@ def get_cluster_data(snapshot_file_paths, working_directory_path, analysis_dir, 
             t25_t75 = t75 - t25
 
             median_age = np.median(star_ages_in_cluster)
+            std_age = np.std(star_ages_in_cluster)
 
             cluster_structure_age = (snap_idx - cluster_start_snapshot)*13.8/2000
 
@@ -2137,6 +2151,7 @@ def get_cluster_data(snapshot_file_paths, working_directory_path, analysis_dir, 
                 'cluster_end_snapshot': cluster_end_snapshot,
                 'star_count': len(star_ages_in_cluster),
                 'median_age': median_age,
+                'std_age': std_age,
                 'median_radial_distance':median_radial,
                 'median_z_distance': median_z,
                 'median_iron': median_iron,
@@ -2193,6 +2208,7 @@ def get_cluster_data(snapshot_file_paths, working_directory_path, analysis_dir, 
             t75 = np.percentile(sorted_ages, 75)
             t25_t75 = t75 - t25
             median_age = np.median(star_ages_in_cluster)
+            std_age = np.std(star_ages_in_cluster)
 
             cluster_structure_age = (snap_idx - cluster_start_snapshot)*13.8/2000
             
@@ -2203,6 +2219,7 @@ def get_cluster_data(snapshot_file_paths, working_directory_path, analysis_dir, 
                 'cluster_end_snapshot': cluster_end_snapshot,
                 'star_count': len(star_ages_in_cluster),
                 'median_age': median_age,
+                'std_age': std_age,
                 'median_radial_distance':median_radial,
                 'median_z_distance': median_z,
                 'median_iron': median_iron,
@@ -2260,7 +2277,130 @@ def get_cluster_masses(snapshot_file_paths, working_directory_path, analysis_dir
 
     np.save(f"{analysis_dir}cluster_masses.npy", cluster_masses, allow_pickle=True)
 
-def fuzzy_cluster_analysis(analysis_dir, working_directory_path, n_snapshots, fuzzy_cluster_analysis_dir):
+def std_deviation_age_analysis(cluster_metrics, cluster_masses, std_deviation_analysis_dir, working_directory_path, star_data_dir, ordering, fuzzy_clusters):
+    """Take std(age) as metric for spread of ages in cluster, plot it vs M, R, Z, Contamination, Loss"""
+    
+    contamination_data = np.load(f"{working_directory_path}star_cluster_analysis_3/burst_cluster_analysis/contamination_analysis/burst_clusters_contamination_data.npy", allow_pickle=True).item()
+
+    if not os.path.exists(f"{std_deviation_analysis_dir}std_deviations.npy") or True:
+        all_std_deviations = []
+        all_masses = []
+        all_radial_distances = []
+        all_irons = []
+        all_z_distances = []
+        all_contamination_fractions = []
+        all_loss_fractions = []
+
+        for cluster_idx, metrics in cluster_metrics.items():
+
+            print(f"Processing cluster {cluster_idx} for standard deviation age analysis")
+            snap_idx = int(metrics['cluster_start_snapshot'])
+
+            star_data = np.load(f"{star_data_dir}star_data_{snap_idx:03d}.npy")
+            star_ids = star_data[:,0]
+            star_ages = star_data[:,1]
+
+            member_ids = get_member_ids_for_fuzzycat_cluster(cluster_idx, ordering, fuzzy_clusters, working_directory_path, snap_idx)
+
+            star_ages_in_cluster = star_ages[np.isin(star_ids, member_ids)]
+
+            standard_deviation_age = np.std(star_ages_in_cluster)
+
+            all_std_deviations.append(standard_deviation_age)
+
+            all_masses.append(np.sum(cluster_masses[cluster_idx][snap_idx]))
+            all_radial_distances.append(metrics['median_radial_distance'])
+            all_irons.append(metrics['median_iron'])
+            all_z_distances.append(metrics['median_z_distance'])
+
+            all_loss_fractions.append(contamination_data[cluster_idx]['loss_fractions'][-1])
+            all_contamination_fractions.append(contamination_data[cluster_idx]['contamination_fractions'][-1])
+
+        # Convert lists to numpy arrays for easier manipulation
+
+        all_std_deviations = np.array(all_std_deviations)
+        all_masses = np.array(all_masses)
+        all_radial_distances = np.array(all_radial_distances)
+        all_irons = np.array(all_irons)
+        all_z_distances = np.array(all_z_distances)
+        all_contamination_fractions = np.array(all_contamination_fractions)
+        all_loss_fractions = np.array(all_loss_fractions)
+
+        # Save the data for further analysis if needed
+        np.save(f"{std_deviation_analysis_dir}std_deviations.npy", all_std_deviations)
+        np.save(f"{std_deviation_analysis_dir}masses.npy", all_masses)
+        np.save(f"{std_deviation_analysis_dir}radial_distances.npy", all_radial_distances)
+        np.save(f"{std_deviation_analysis_dir}irons.npy", all_irons)
+        np.save(f"{std_deviation_analysis_dir}z_distances.npy", all_z_distances)
+        np.save(f"{std_deviation_analysis_dir}contamination_fractions.npy", all_contamination_fractions)
+        np.save(f"{std_deviation_analysis_dir}loss_fractions.npy", all_loss_fractions)
+
+    all_std_deviations = np.load(f"{std_deviation_analysis_dir}std_deviations.npy")
+    all_masses = np.load(f"{std_deviation_analysis_dir}masses.npy")
+    all_radial_distances = np.load(f"{std_deviation_analysis_dir}radial_distances.npy")
+    all_irons = np.load(f"{std_deviation_analysis_dir}irons.npy")
+    all_z_distances = np.load(f"{std_deviation_analysis_dir}z_distances.npy")
+    all_contamination_fractions = np.load(f"{std_deviation_analysis_dir}contamination_fractions.npy")
+    all_loss_fractions = np.load(f"{std_deviation_analysis_dir}loss_fractions.npy")
+
+    contamination_mask = ~((all_loss_fractions == 1.0) | (all_contamination_fractions == 0.0))
+    all_std_deviations_masked = all_std_deviations[contamination_mask]
+    all_contamination_fractions = all_contamination_fractions[contamination_mask]
+    all_loss_fractions = all_loss_fractions[contamination_mask]
+    
+    # Create scatter plots for std deviation vs mass, radial distance, iron metallicity, contamination and loss
+    fig, ax = plt.subplots(2, 2, figsize=(16, 12))
+
+    coeffs = np.polyfit(all_std_deviations, np.log10(all_masses), 1)
+    poly_fit_func = np.poly1d(coeffs)
+    x_trend = np.linspace(min(all_std_deviations), max(all_std_deviations), 100)
+    y_trend = 10**poly_fit_func(x_trend)
+
+
+    ax[0, 0].scatter(all_std_deviations, all_masses)
+    ax[0, 0].set_title("Standard Deviation of Ages vs Cluster Mass in birth snapshot")
+    ax[0, 0].set_xlabel("Standard Deviation of Ages (Gyr)")
+    ax[0, 0].set_ylabel("Cluster Mass (Msol)")
+    ax[0, 0].set_yscale('log')
+    ax[0, 0].grid(True, linestyle='--', alpha=0.9)
+    ax[0, 0].plot(x_trend, y_trend, "r--", linewidth=2, label="Trendline")
+    ax[0, 0].legend()
+
+    ax[0, 1].scatter(all_std_deviations, all_radial_distances )
+    ax[0, 1].set_title("Standard Deviation of Ages vs Median Radial Distance in birth snapshot")
+    ax[0, 1].set_xlabel("Standard Deviation of Ages (Gyr)")
+    ax[0, 1].set_ylabel("Median Radial Distance (kpc)")
+    ax[0, 1].grid(True, linestyle='--', alpha=0.9)
+
+    # ax[1, 0].scatter( all_std_deviations,all_irons)
+    # ax[1, 0].set_title("Standard Deviation of Ages vs Median Iron Metallicity in birth snapshot")
+    # ax[1, 0].set_xlabel("Standard Deviation of Ages (Gyr)")
+    # ax[1, 0].set_ylabel("Median Iron Metallicity [Fe/H]")
+    # ax[1, 0].grid(True, linestyle='--', alpha=0.9)
+    
+    ax[1, 1].scatter(all_std_deviations_masked, all_contamination_fractions, alpha=0.7, label='Contamination Fraction')
+    ax[1, 1].scatter(all_std_deviations_masked, all_loss_fractions, alpha=0.7, label='Loss Fraction', color='orange')
+    ax[1, 1].set_title("Standard Deviation of Ages in birth snapshot vs Contamination and Loss Fractions in last snapshot")
+    ax[1, 1].set_xlabel("Standard Deviation of Ages (Gyr)")
+    ax[1, 1].set_ylabel("Fraction")
+    ax[1, 1].set_xlim(0, np.max(all_std_deviations) * 1.2)
+    ax[1, 1].grid(True, linestyle='--', alpha=0.9)
+    ax[1, 1].legend()
+
+    ax[1, 0].scatter(all_std_deviations, all_z_distances)
+    ax[1, 0].set_title("Standard Deviation of Ages vs Median Z Distance in birth snapshot")
+    ax[1, 0].set_xlabel("Standard Deviation of Ages (Gyr)")
+    ax[1, 0].set_ylabel("Median Z Distance (kpc)")
+    ax[1, 0].grid(True, linestyle='--', alpha=0.9)
+
+
+    fig.suptitle("Standard Deviation of Ages in Star Clusters", fontsize=20)
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.savefig(f"{std_deviation_analysis_dir}std_deviation_age_analysis.png", dpi=300)
+    plt.close(fig)
+
+
+def fuzzy_cluster_analysis(analysis_dir, working_directory_path, n_snapshots, fuzzy_cluster_analysis_dir, star_data_dir, ordering, fuzzy_clusters):
     """Analyze all fuzzy clusters and make plots"""
 
     # Create output directories
@@ -2276,7 +2416,7 @@ def fuzzy_cluster_analysis(analysis_dir, working_directory_path, n_snapshots, fu
     # #------Lifetime distribution of clusters-----
     lifetime_analysis_dir = f"{fuzzy_cluster_analysis_dir}lifetime_analysis/"
     os.makedirs(lifetime_analysis_dir, exist_ok=True)
-    lifetime_analysis(cluster_metrics, cluster_masses, lifetime_analysis_dir)
+    #lifetime_analysis(cluster_metrics, cluster_masses, lifetime_analysis_dir)
 
     # #------Position distribution of clusters-----
     spacial_distribution_analysis_dir = f"{fuzzy_cluster_analysis_dir}spacial_distribution_analysis/"
@@ -2288,8 +2428,12 @@ def fuzzy_cluster_analysis(analysis_dir, working_directory_path, n_snapshots, fu
     os.makedirs(metallicity_distribution_analysis_dir, exist_ok=True)
     #metallicity_distribution_analysis(cluster_metrics, metallicity_distribution_analysis_dir)
 
+    std_deviation_analysis_dir = f"{fuzzy_cluster_analysis_dir}std_deviation_analysis/"
+    os.makedirs(std_deviation_analysis_dir, exist_ok=True)
+    #std_deviation_age_analysis(cluster_metrics, cluster_masses, std_deviation_analysis_dir, working_directory_path, star_data_dir, ordering, fuzzy_clusters)
 
-def burst_cluster_analysis(analysis_dir, burst_cluster_analysis_dir, working_directory_path, n_snapshots, ordering, fuzzy_clusters):
+
+def burst_cluster_analysis(analysis_dir, burst_cluster_analysis_dir, working_directory_path, n_snapshots, ordering, fuzzy_clusters, star_data_dir):
     """Analyze all burst clusters and make plots"""
     cluster_metrics = np.load(f"{analysis_dir}all_cluster_metrics.npy", allow_pickle=True).item()
     cluster_masses = np.load(f"{analysis_dir}cluster_masses.npy", allow_pickle=True).item()
@@ -2322,6 +2466,9 @@ def burst_cluster_analysis(analysis_dir, burst_cluster_analysis_dir, working_dir
     os.makedirs(contamination_analysis_dir, exist_ok=True)
     #contamination_analysis(cluster_metrics, cluster_masses, contamination_analysis_dir, working_directory_path, ordering, fuzzy_clusters)
     
+    std_deviation_analysis_dir = f"{burst_cluster_analysis_dir}std_deviation_analysis/"
+    os.makedirs(std_deviation_analysis_dir, exist_ok=True)
+    #std_deviation_age_analysis(cluster_metrics, cluster_masses, std_deviation_analysis_dir, working_directory_path, star_data_dir, ordering, fuzzy_clusters)
 
 
 
@@ -2378,13 +2525,13 @@ def star_cluster_analysis(snapshot_file_paths, working_directory_path, axisLimit
     fuzzy_cluster_analysis_dir = f"{analysis_dir}fuzzy_cluster_analysis/"
     os.makedirs(fuzzy_cluster_analysis_dir, exist_ok=True)
 
-    fuzzy_cluster_analysis(analysis_dir, working_directory_path, n_snapshots, fuzzy_cluster_analysis_dir)
+    #fuzzy_cluster_analysis(analysis_dir, working_directory_path, n_snapshots, fuzzy_cluster_analysis_dir, star_data_dir, ordering, fuzzy_clusters)
 
     #------make plots for all burst clusters----------
     burst_cluster_analysis_dir = f"{analysis_dir}burst_cluster_analysis/"
     os.makedirs(burst_cluster_analysis_dir, exist_ok=True)
 
-    burst_cluster_analysis(analysis_dir, burst_cluster_analysis_dir, working_directory_path, n_snapshots, ordering, fuzzy_clusters)
+    burst_cluster_analysis(analysis_dir, burst_cluster_analysis_dir, working_directory_path, n_snapshots, ordering, fuzzy_clusters, star_data_dir)
 
     
     #------ plot the cdf of each birth cluster over time and create movies of cdf for every cluster, then create movie of simulation with top 50 star forming clusters ----------
@@ -2800,7 +2947,7 @@ if __name__ == "__main__":
     plot_labels = False
 
     # Choice of tagging from ['dynamical' (standard), 'chemical', 'chemodynamical']
-    tagging = 'chemodynamical'
+    tagging = 'dynamical'
 
     # The minimum life-span of fuzzy clusters in Mega-years
     minLongevityOfFuzzyClusters = 230 
