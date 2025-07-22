@@ -29,17 +29,17 @@ def plot_cluster_mass_distribution(data_path):
     mean_errors_chemdyn = np.mean(errors_chemdyn)
 
     # --- Create combined Plot ---
-    plt.style.use('seaborn-v0_8-whitegrid') 
-    fig, ax = plt.subplots(figsize=(12, 7))
+    #plt.style.use('seaborn-v0_8-whitegrid') 
+    fig, ax = plt.subplots(figsize=(12, 8))
 
     # --- Plot the main trend line ---
     # Use a solid line with small, subtle markers.
     ax.plot(snapshots_dyn, slopes_dyn, 
             marker='o',          # Small circle markers at each data point
-            markersize=5,        # Control the size of the markers
+            markersize=3,        # Control the size of the markers
             linestyle='-',       # A solid line connecting the points
             color='C0',          # Use the default blue color
-            label=f'Slope dynamical (α): {mean_slopes_dyn:.2f} ± {mean_errors_dyn:.2f}')  # Add mean slope and error to the label
+            label=f'Dynamical β (Mean across all snapshots: {mean_slopes_dyn:.2f} ± {mean_errors_dyn:.2f})')  # Add mean slope and error to the label
 
     # --- Plot the shaded error region ---
     # This is the key function: plt.fill_between
@@ -52,10 +52,10 @@ def plot_cluster_mass_distribution(data_path):
 
     ax.plot(snapshots_chemdyn, slopes_chemdyn, 
             marker='o',          # Small circle markers at each data point
-            markersize=5,        # Control the size of the markers
+            markersize=3,        # Control the size of the markers
             linestyle='-',       # A solid line connecting the points
             color='C2',          # Use the default blue color
-            label=f'Slope chemodynamical (α): {mean_slopes_chemdyn:.2f} ± {mean_errors_chemdyn:.2f}')  # Add mean slope and error to the label
+            label=f'Chemodynamical β (Mean across all snapshots: {mean_slopes_chemdyn:.2f} ± {mean_errors_chemdyn:.2f})')  # Add mean slope and error to the label
 
     # --- Plot the shaded error region ---
     # This is the key function: plt.fill_between
@@ -66,21 +66,22 @@ def plot_cluster_mass_distribution(data_path):
                     alpha=0.2)           # Use transparency to make it subtle
 
     # --- Add a reference line for the theoretical initial slope ---
-    ax.axhline(-2.0, 
-            color='red', 
+    ax.axhline(-1.0, 
+            color='orange', 
             linestyle='--', 
             linewidth=2,
-            label='Theoretical Slope (α = -2.0)')
+            label='Theoretical Slope (β = -1.0)')
 
-    ax.set_xlabel("Snapshot Index", fontsize=14)
-    ax.set_ylabel("Mass Function Slope (α)", fontsize=14)
-    ax.set_title("Evolution of the Cluster Mass Function Slope", fontsize=16, fontweight='bold')
-    ax.tick_params(axis='both', which='major', labelsize=12)
+    ax.set_xlabel("Snapshot Index", fontsize=18)
+    ax.set_ylabel("Mass Function Slope (β)", fontsize=18)
+    #ax.set_title("Evolution of the Cluster Mass Function Slope", fontsize=16, fontweight='bold')
+    ax.tick_params(axis='both', which='major', labelsize=14)
     ax.set_xlim(snapshots_dyn.min() - 1, snapshots_dyn.max() + 1)
-    ax.set_ylim(-2.1, -1.0) # Adjust this based on your data's range
-    ax.legend(fontsize=12, loc='upper right')
+    ax.set_ylim(-1.8, -0.9) # Adjust this based on your data's range
+    ax.legend(fontsize=14, loc='lower right')
+    plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
-    plt.savefig(f"{data_path}/IMF_evolution_comparison.png", dpi=300)
+    plt.savefig(f"{data_path}/CMF_evolution_comparison_scipy_fit.png", dpi=300)
 
 def spacial_distribution_analysis(cluster_data, dir):
 
@@ -209,35 +210,50 @@ def power_law_analysis_few_clusters(power_law_analysis_dir, n_snapshots, cluster
         log_bins = np.linspace(min_logM, max_logM, num_bins + 1)  # Create bins in log scale
         linear_bins = 10**log_bins  # Convert back to linear scale for histogramming
         original_dN, _ = np.histogram(cluster_masses, bins=linear_bins)
+
+        #----
+        log_bin_centers = 0.5 * (log_bins[:-1] + log_bins[1:])  # Centers of the log bins
+        dM = linear_bins[1:] - linear_bins[:-1]  # Width of the bins in linear scale
+        dM[dM==0] = 1e-9
+        dN_dM = original_dN / dM  # Number of clusters per bin width
+        mask = (10**log_bin_centers >= 1e4) & (original_dN > 0)  # Filter for Mcl ≥ 1e4 and dN > 0
+        x_fit_data = log_bin_centers[mask]
+        y_fit_data = np.log10(dN_dM[mask])
+        if x_fit_data.size > 1:
+            # Perform linear regression to find the slope and intercept
+            res = stats.linregress(x_fit_data, y_fit_data)
+            slope, y_intercept, slope_error, y_intercept_error, r_sqr = res.slope, res.intercept, res.stderr, res.intercept_stderr, res.rvalue**2
+
+        #----
         
-        #bootstrap to estimate the error of the power law fit
-        bootstrap_slopes = []
-        bootstrap_y_intercepts = []
-        dN_dM_array = []
-        for i in range(num_bootstraps):
-            resampled_dN = np.random.poisson(original_dN)
-            log_bin_centers = 0.5 * (log_bins[:-1] + log_bins[1:])  # Centers of the log bins
-            dM = linear_bins[1:] - linear_bins[:-1]  # Width of the bins in linear scale
-            dM[dM==0] = 1e-9  # Avoid division by zero
-            resampled_dN_dM = resampled_dN / dM
-            mask = (10**log_bin_centers >= 1e4) & (resampled_dN > 0)  # Filter for Mcl ≥ 1e4 and dN > 0
-            x_fit_data = log_bin_centers[mask]
-            y_fit_data = np.log10(resampled_dN_dM[mask])
-            if x_fit_data.size > 1:
-                slope, y_intercept = np.polyfit(x_fit_data, y_fit_data, 1)
-                bootstrap_slopes.append(slope)
-                bootstrap_y_intercepts.append(y_intercept)
-                dN_dM_array.append(resampled_dN_dM)
+        # #bootstrap to estimate the error of the power law fit
+        # bootstrap_slopes = []
+        # bootstrap_y_intercepts = []
+        # dN_dM_array = []
+        # for i in range(num_bootstraps):
+        #     resampled_dN = np.random.poisson(original_dN)
+        #     log_bin_centers = 0.5 * (log_bins[:-1] + log_bins[1:])  # Centers of the log bins
+        #     dM = linear_bins[1:] - linear_bins[:-1]  # Width of the bins in linear scale
+        #     dM[dM==0] = 1e-9  # Avoid division by zero
+        #     resampled_dN_dM = resampled_dN / dM
+        #     mask = (10**log_bin_centers >= 1e4) & (resampled_dN > 0)  # Filter for Mcl ≥ 1e4 and dN > 0
+        #     x_fit_data = log_bin_centers[mask]
+        #     y_fit_data = np.log10(resampled_dN_dM[mask])
+        #     if x_fit_data.size > 1:
+        #         slope, y_intercept = np.polyfit(x_fit_data, y_fit_data, 1)
+        #         bootstrap_slopes.append(slope)
+        #         bootstrap_y_intercepts.append(y_intercept)
+        #         dN_dM_array.append(resampled_dN_dM)
         
-        if(len(bootstrap_slopes) > 15):
-            slope = np.mean(bootstrap_slopes)
-            slope_error = np.std(bootstrap_slopes)
-            y_intercept = np.mean(bootstrap_y_intercepts)
-            y_intercept_error = np.std(bootstrap_y_intercepts)
-            dN_dM = np.mean(dN_dM_array, axis=0)  # Average over bootstrap samples
+        if(True): #len(bootstrap_slopes) > 15):
+            # slope = np.mean(bootstrap_slopes)
+            # slope_error = np.std(bootstrap_slopes)
+            # y_intercept = np.mean(bootstrap_y_intercepts)
+            # y_intercept_error = np.std(bootstrap_y_intercepts)
+            # dN_dM = np.mean(dN_dM_array, axis=0)  # Average over bootstrap samples
             #results_snapshots.append(snapshot_idx)
-            results_mean_slopes.append(slope)
-            results_slope_errors.append(slope_error)
+            # results_mean_slopes.append(slope)
+            # results_slope_errors.append(slope_error)
             #print(f"Estimated power law slope for cluster masses at snapshot {final_snapshot_idx}: {slope:.2f} ± {slope_error:.2f}")
             # if not make_individual_plots:
             #     continue
@@ -247,23 +263,22 @@ def power_law_analysis_few_clusters(power_law_analysis_dir, n_snapshots, cluster
             y_err_propagated = np.sqrt((x_fit_line * slope_error)**2 + y_intercept_error**2)
             y_upper = y_fit_line + y_err_propagated
             y_lower = y_fit_line - y_err_propagated
-            plt.figure(figsize=(10, 6))
+            plt.figure(figsize=(10, 7))
             plt.fill_between(10**x_fit_line, 10**y_lower, 10**y_upper, color='red', alpha=0.2, label='1-$\sigma$ Uncertainty')
             plt.scatter(10**log_bin_centers[mask], dN_dM[mask], color='blue', label='Simulation Data', s=10)
-            plt.plot(10**x_fit_line, 10**y_fit_line, 'r--', color='red', label=f"Fit: slope = {slope:.2f}")
+            plt.plot(10**x_fit_line, 10**y_fit_line, 'r--', color='red', label=f"Fit: Slope = {slope:.2f} ± {slope_error:.2f}, R² = {r_sqr:.2f}")
             plt.grid(True, linestyle='--', alpha=0.5, axis='both')
             plt.legend()    
             plt.xscale('log')
             plt.yscale('log')
-            plt.xlabel("Cluster Mass")
-            plt.ylabel("Number of Clusters per delta log(M)")
+            plt.xlabel("Cluster Mass (M$_\odot$)")
+            plt.ylabel("Number of Clusters (N) per delta log(M)")
             plt.title("Cluster Mass Function")
             #plt.savefig(f"{individual_plots_dir}cluster_mass_function_snapshot{final_snapshot_idx}.png", dpi=200)
-            plt.savefig(f"{individual_plots_dir}cluster_mass_function_overall.png", dpi=200)
+            plt.savefig(f"{individual_plots_dir}cluster_mass_function_overall_2.png", dpi=200)
             plt.close()
         #print(f"Saved cluster mass function plot for snapshot {final_snapshot_idx} to {individual_plots_dir}cluster_mass_function_snapshot{final_snapshot_idx}.png")
-        else:
-            print("Not enough data points to fit a power law for cluster masses at the final snapshot.")
+
 
 def power_law_analysis_many_clusters(power_law_analysis_dir, n_snapshots, cluster_masses):
     """
@@ -337,32 +352,56 @@ def power_law_analysis_many_clusters(power_law_analysis_dir, n_snapshots, cluste
 
             linear_bins = 10**log_bins  # Convert back to linear scale for histogramming
             original_dN, _ = np.histogram(cluster_masses, bins=linear_bins)
+
+            #----
+            log_bin_centers = 0.5 * (log_bins[:-1] + log_bins[1:])  # Centers of the log bins
+            dM = linear_bins[1:] - linear_bins[:-1]  # Width of the bins in linear scale
+            dM[dM==0] = 1e-9
+            dN_dM = original_dN / dM  # Number of clusters per bin width
+            mask = (10**log_bin_centers >= 1e4) & (original_dN > 0)  # Filter for Mcl ≥ 1e4 and dN > 0
+            x_fit_data = log_bin_centers[mask]
+            y_fit_data = np.log10(dN_dM[mask])
+            if x_fit_data.size > 1:
+                # Perform linear regression to find the slope and intercept
+                res = stats.linregress(x_fit_data, y_fit_data)
+                slope, y_intercept, slope_error, y_intercept_error, r_sqr = res.slope, res.intercept, res.stderr, res.intercept_stderr, res.rvalue**2
+
+            #----
             
-            #bootstrap to estimate the error of the power law fit
-            bootstrap_slopes = []
-            bootstrap_y_intercepts = []
-            dN_dM_array = []
-            for i in range(num_bootstraps):
-                resampled_dN = np.random.poisson(original_dN)
-                log_bin_centers = 0.5 * (log_bins[:-1] + log_bins[1:])  # Centers of the log bins
-                dM = linear_bins[1:] - linear_bins[:-1]  # Width of the bins in linear scale
-                dM[dM==0] = 1e-9  # Avoid division by zero
-                resampled_dN_dM = resampled_dN / dM
-                mask = (10**log_bin_centers >= 1e4) & (resampled_dN > 0)  # Filter for Mcl ≥ 1e4 and dN > 0
-                x_fit_data = log_bin_centers[mask]
-                y_fit_data = np.log10(resampled_dN_dM[mask])
-                if x_fit_data.size > 1:
-                    slope, y_intercept = np.polyfit(x_fit_data, y_fit_data, 1)
-                    bootstrap_slopes.append(slope)
-                    bootstrap_y_intercepts.append(y_intercept)
-                    dN_dM_array.append(resampled_dN_dM)
+            # #bootstrap to estimate the error of the power law fit
+            # bootstrap_slopes = []
+            # bootstrap_y_intercepts = []
+            # bootstrap_slope_errors = []
+            # bootstrap_y_intercept_errors = []
+            # dN_dM_array = []
+            # for i in range(num_bootstraps):
+            #     resampled_dN = np.random.poisson(original_dN)
+            #     log_bin_centers = 0.5 * (log_bins[:-1] + log_bins[1:])  # Centers of the log bins
+            #     dM = linear_bins[1:] - linear_bins[:-1]  # Width of the bins in linear scale
+            #     dM[dM==0] = 1e-9  # Avoid division by zero
+            #     resampled_dN_dM = resampled_dN / dM
+            #     mask = (10**log_bin_centers >= 1e4) & (resampled_dN > 0)  # Filter for Mcl ≥ 1e4 and dN > 0
+            #     x_fit_data = log_bin_centers[mask]
+            #     y_fit_data = np.log10(resampled_dN_dM[mask])
+            #     if x_fit_data.size > 1:
+            #         res = stats.linregress(x_fit_data, y_fit_data)
+            #         slope, y_intercept, slope_std, intercept_std = res.slope, res.intercept, res.stderr, res.intercept_stderr
+            #         bootstrap_slopes.append(slope)
+            #         bootstrap_y_intercepts.append(y_intercept)
+            #         bootstrap_slope_errors.append(slope_std)
+            #         bootstrap_y_intercept_errors.append(intercept_std)
+            #         dN_dM_array.append(resampled_dN_dM)
+
             
-            if(len(bootstrap_slopes) > 15):
-                slope = np.mean(bootstrap_slopes)
-                slope_error = np.std(bootstrap_slopes)
-                y_intercept = np.mean(bootstrap_y_intercepts)
-                y_intercept_error = np.std(bootstrap_y_intercepts)
-                dN_dM = np.mean(dN_dM_array, axis=0)  # Average over bootstrap samples
+            
+            if(True): #len(bootstrap_slopes) > 15):
+                #slope = np.mean(bootstrap_slopes)
+                #slope_error = np.std(bootstrap_slopes)
+                #slope_error = np.mean(bootstrap_slope_errors)
+                #y_intercept = np.mean(bootstrap_y_intercepts)
+                #y_intercept_error = np.std(bootstrap_y_intercepts)
+                #y_intercept_error = np.mean(bootstrap_y_intercept_errors)
+                #dN_dM = np.mean(dN_dM_array, axis=0)  # Average over bootstrap samples
                 results_snapshots.append(snapshot_idx)
                 results_mean_slopes.append(slope)
                 results_slope_errors.append(slope_error)
@@ -375,15 +414,15 @@ def power_law_analysis_many_clusters(power_law_analysis_dir, n_snapshots, cluste
                 y_err_propagated = np.sqrt((x_fit_line * slope_error)**2 + y_intercept_error**2)
                 y_upper = y_fit_line + y_err_propagated
                 y_lower = y_fit_line - y_err_propagated
-                plt.figure(figsize=(10, 6))
-                plt.fill_between(10**x_fit_line, 10**y_lower, 10**y_upper, color='red', alpha=0.2, label='1-$\sigma$ Uncertainty')
+                plt.figure(figsize=(10, 7))
+                plt.fill_between(10**x_fit_line, 10**y_lower, 10**y_upper, color='red', alpha=0.2, label='Uncertainty')
                 plt.scatter(10**log_bin_centers[mask], dN_dM[mask], color='blue', label='Simulation Data', s=10)
-                plt.plot(10**x_fit_line, 10**y_fit_line, 'r--', color='red', label=f"Fit: slope = {slope:.2f}")
+                plt.plot(10**x_fit_line, 10**y_fit_line, 'r--', color='red', label=f"Fit: slope = {slope:.2f} ± {slope_error:.2f}, R² = {r_sqr:.2f}")
                 plt.grid(True, linestyle='--', alpha=0.5, axis='both')
                 plt.legend()    
                 plt.xscale('log')
                 plt.yscale('log')
-                plt.xlabel("Cluster Mass")
+                plt.xlabel("Cluster Mass (M$_\odot$)")
                 plt.ylabel("Number of Clusters per delta log(M)")
                 plt.title("Cluster Mass Function")
                 plt.savefig(f"{individual_plots_dir}cluster_mass_function_snapshot{snapshot_idx}.png", dpi=200)
@@ -422,7 +461,7 @@ def power_law_analysis_many_clusters(power_law_analysis_dir, n_snapshots, cluste
             markersize=5,        # Control the size of the markers
             linestyle='-',       # A solid line connecting the points
             color='C0',          # Use the default blue color
-            label='Slope (α)')
+            label='Slope (β)')
 
     # --- Plot the shaded error region ---
     # This is the key function: plt.fill_between
@@ -441,7 +480,7 @@ def power_law_analysis_many_clusters(power_law_analysis_dir, n_snapshots, cluste
             label='Theoretical Slope (α = -2.0)')
 
     ax.set_xlabel("Snapshot Index", fontsize=14)
-    ax.set_ylabel("Mass Function Slope (α)", fontsize=14)
+    ax.set_ylabel("Mass Function Slope (β)", fontsize=14)
     ax.set_title("Evolution of the Cluster Mass Function Slope", fontsize=16, fontweight='bold')
     ax.tick_params(axis='both', which='major', labelsize=12)
     ax.set_xlim(snapshots.min() - 1, snapshots.max() + 1)
@@ -452,7 +491,6 @@ def power_law_analysis_many_clusters(power_law_analysis_dir, n_snapshots, cluste
 
 
 def star_forming_vs_non_star_forming_age_distribution(analysis_dir, cluster_data):
-
 
     """
     Analyze the median age distribution of star forming clusters during their burst snapshot.
@@ -499,48 +537,63 @@ def star_forming_vs_non_star_forming_age_distribution(analysis_dir, cluster_data
     cmap = plt.get_cmap('viridis') 
     norm = colors.Normalize(vmin=radius_min, vmax=radius_max)
 
-    # Create the plot
-    fig, ax = plt.subplots(figsize=(12, 8))
+    # # Create the plot
+    # fig, ax = plt.subplots(figsize=(12, 8))
 
-    # Plot both histograms on the same axes
-    plot_colored_histogram(ax, median_ages_star_forming, radii_star_forming,
-                        n_bins=10, colormap=cmap, norm=norm, 
-                        label='Star Forming Clusters', alpha=0.5)
+    # # Plot both histograms on the same axes
+    # plot_colored_histogram(ax, median_ages_star_forming, radii_star_forming,
+    #                     n_bins=10, colormap=cmap, norm=norm, 
+    #                     label='Star Forming Clusters', alpha=0.5)
 
-    plot_colored_histogram(ax, median_ages_non_star_forming, radii_non_star_forming,
-                        n_bins=90, colormap=cmap, norm=norm, 
-                        label='Non-Star Forming Clusters', alpha=0.9)
+    # plot_colored_histogram(ax, median_ages_non_star_forming, radii_non_star_forming,
+    #                     n_bins=90, colormap=cmap, norm=norm, 
+    #                     label='Non-Star Forming Clusters', alpha=0.9)
 
-    # Add the colorbar as a legend for the radius
-    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
-    sm.set_array([]) # You need this to make the colorbar work
-    cbar = fig.colorbar(sm, ax=ax, pad=0.01)
-    cbar.set_label('Median Radial Distance (kpc)', rotation=270, labelpad=20)
+    # # Add the colorbar as a legend for the radius
+    # sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+    # sm.set_array([]) # You need this to make the colorbar work
+    # cbar = fig.colorbar(sm, ax=ax, pad=0.01)
+    # cbar.set_label('Median Radial Distance (kpc)', rotation=270, labelpad=20)
 
 
-    # Final plot formatting
-    ax.set_title("Median Age Distribution Colored by Radial Distance")
-    ax.set_xlabel("Median Age (Gyr)")
-    ax.set_ylabel("Cluster Count")
-    ax.legend()
-    ax.grid(True, linestyle='--', alpha=0.6)
-    plt.tight_layout()
-    plt.savefig(f"{age_distribution_analysis_dir}colored_median_age_distribution_colored_by_radius.png", dpi=300)
-    plt.show()
-    plt.close()
+    # # Final plot formatting
+    # ax.set_title("Median Age Distribution Colored by Radial Distance")
+    # ax.set_xlabel("Median Age (Gyr)")
+    # ax.set_ylabel("Cluster Count")
+    # ax.legend()
+    # ax.grid(True, linestyle='--', alpha=0.6)
+    # plt.tight_layout()
+    # plt.savefig(f"{age_distribution_analysis_dir}colored_median_age_distribution_colored_by_radius.png", dpi=300)
+    # plt.show()
+    # plt.close()
     
 
-    #plot the mean age distributions
+    # #plot the mean age distributions
+    # plt.figure(figsize=(12, 8))
+    # sns.histplot(median_ages_star_forming, bins=10, color='blue', label='Star Forming Clusters', alpha=0.6)
+    # sns.histplot(median_ages_non_star_forming, bins=90, color='orange', label='Non-Star Forming Clusters', alpha=0.4)
+    # plt.title("Median Age Distribution of Star Forming vs Non-Star Forming Clusters")
+    # plt.xlabel("Median Age (Gyr)")
+    # plt.ylabel("Cluster Count")
+    # plt.legend()
+    # plt.grid(True, linestyle='--', alpha=0.7)
+    # plt.tight_layout()
+    # plt.savefig(f"{age_distribution_analysis_dir}new_median_age_distribution_star_vs_non_star_forming_absolute_count.png", dpi=300)
+    # plt.close()
+
+    # Plot radial distance vs median age for star forming clusters, markers based on star-forming and non-star-forming
     plt.figure(figsize=(12, 8))
-    sns.histplot(median_ages_star_forming, bins=10, color='blue', label='Star Forming Clusters', alpha=0.6)
-    sns.histplot(median_ages_non_star_forming, bins=90, color='orange', label='Non-Star Forming Clusters', alpha=0.4)
-    plt.title("Median Age Distribution of Star Forming vs Non-Star Forming Clusters")
+    plt.scatter(median_ages_star_forming, radii_star_forming,
+                c='blue', alpha=0.9, label='Star Forming Clusters', s=40, marker='x')
+    plt.scatter(median_ages_non_star_forming, radii_non_star_forming,
+                c='orange', alpha=0.9, label='Non-Star Forming Clusters', s=30, marker='o')
+    plt.title("Radial Distance vs Median Age of Clusters")
     plt.xlabel("Median Age (Gyr)")
-    plt.ylabel("Cluster Count")
+    plt.ylabel("Median Radial Distance (kpc)")
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
-    plt.savefig(f"{age_distribution_analysis_dir}new_median_age_distribution_star_vs_non_star_forming_absolute_count.png", dpi=300)
+    plt.savefig(f"{age_distribution_analysis_dir}radial_distance_vs_median_age_star_vs_non_star_forming.png", dpi=300)
     plt.close()
 
 def plot_colored_histogram(ax, ages, radii, n_bins, colormap, norm, label, alpha=1.0):
@@ -580,7 +633,7 @@ def plot_colored_histogram(ax, ages, radii, n_bins, colormap, norm, label, alpha
                    label=bar_label)
 
 def loss_contamination_analysis(cluster_metrics, cluster_masses, contamination_analysis_dir, dir):
-    contamination_data = np.load(f"{contamination_analysis_dir}burst_clusters_contamination_data.npy", allow_pickle=True).item()
+    contamination_data = np.load(f"{contamination_analysis_dir}cluster_metrics_contamination_data.npy", allow_pickle=True).item()
     dir = f"{dir}contamination/"
     os.makedirs(dir, exist_ok=True)
 
@@ -589,7 +642,9 @@ def loss_contamination_analysis(cluster_metrics, cluster_masses, contamination_a
     # Plot Loss/Contamination vs N/M as scatter plot in last snapshot of cluster
     losses = []
     contaminations = []
-    masses = []
+    total_masses = []
+    lifetimes = []
+    mass_fractions = []
 
     for cluster_idx, data in contamination_data.items():
         # Get the last snapshot where the cluster was detected
@@ -599,22 +654,35 @@ def loss_contamination_analysis(cluster_metrics, cluster_masses, contamination_a
         loss = data['loss_fractions'][last_snapshot_idx]
         contamination = data['contamination_fractions'][last_snapshot_idx]
 
-        # Get the mass of the cluster at that snapshot
-        mass = np.sum(cluster_masses[cluster_idx][max(data['snapshots'])])  # Assuming cluster_masses is a dict with cluster_idx as keys and mass arrays as values
+        start_snapshot = cluster_metrics[cluster_idx]['cluster_start_snapshot']
+        end_snapshot = cluster_metrics[cluster_idx]['cluster_end_snapshot']
+
+        lifetime = (end_snapshot - start_snapshot) *13.8/2000 # Convert to Gyr, assuming 2000 snapshots represent 13.8 Gyr
+
+        mass_fraction = np.abs((np.sum(cluster_masses[cluster_idx][start_snapshot]) - np.sum(cluster_masses[cluster_idx][end_snapshot]))) / np.sum(cluster_masses[cluster_idx][start_snapshot])  # Initial mass minus final mass divided by initial mass
+
+        # Get the mass of the cluster at the end snapshot
+        total_mass = np.sum(cluster_masses[cluster_idx][end_snapshot])
 
         losses.append(loss)
         contaminations.append(contamination)
-        masses.append(mass)
+        total_masses.append(total_mass)
+        lifetimes.append(lifetime)
+        mass_fractions.append(mass_fraction)
         
     # Convert to numpy arrays for easier manipulation
     loss = np.array(losses)
     contamination = np.array(contaminations)
-    mass = np.array(masses)
+    mass = np.array(total_masses)
+    lifetime = np.array(lifetimes)
+    mass_fraction = np.array(mass_fractions)
 
     mask = ~((loss == 1) & (contamination == 0))
     loss = loss[mask]
     contamination = contamination[mask]
     mass = mass[mask]
+    lifetime = lifetime[mask]
+    mass_fraction = mass_fraction[mask]
 
     log_mass = np.log10(mass)
 
@@ -627,43 +695,86 @@ def loss_contamination_analysis(cluster_metrics, cluster_masses, contamination_a
 
 
     # --- Create the plots ---
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6), sharey=True)
+    fig, ax = plt.subplots(2, 2, figsize=(16, 15))
     fig.suptitle('Loss and Contamination Trends for Star Clusters', fontsize=16)
 
+    vmin, vmax = np.percentile(lifetime, [10, 90])
 
-    # --- Plot 1: Loss vs. Mass ---
-    ax1.scatter(mass, loss, color='blue', label='Loss Data', alpha=0.5)
+
+    # --- Plot 1: Loss vs. Mass, color represents lifetime ---
+    sc = ax[0,0].scatter(mass, loss, c=lifetime, cmap='viridis', norm=colors.Normalize(vmin=vmin, vmax=vmax), label='Loss Data', alpha=0.8)
+    fig.colorbar(sc, label='Cluster Lifetime (Gyr)', ax=ax[0,0], orientation='vertical')
+    # Create the points for the trendline
+    # We calculate the y-values using the fit results on the log_mass
+    trend_y_loss = slope_loss * log_mass + intercept_loss
+    # Plot the trendline. We can sort the values to ensure the line is drawn correctly.
+    sorted_indices = np.argsort(mass)
+    ax[0,0].plot(mass[sorted_indices], trend_y_loss[sorted_indices], color='darkblue', linestyle='--', 
+            label=f'Fit (R²={r_value_loss**2:.2f})') # Add R-squared to the label
+
+    ax[0,0].set_title('Loss vs. Cluster Mass, colored by Lifetime')
+    ax[0,0].set_xlabel('Cluster Mass (M☉)')
+    ax[0,0].set_ylabel('Loss Fraction')
+    ax[0,0].legend()
+
+
+    # --- Plot 2: Contamination vs. Mass ---
+    sc=ax[0,1].scatter(mass, contamination, c=lifetime, cmap='viridis', norm=colors.Normalize(vmin=vmin, vmax=vmax), label='Contamination Data', alpha=0.8)
+    fig.colorbar(sc,label='Cluster Lifetime (Gyr)', ax=ax[0,1], orientation='vertical')
+    # Create the points for the trendline
+    trend_y_cont = slope_cont * log_mass + intercept_cont
+    # Plot the trendline
+    ax[0,1].plot(mass[sorted_indices], trend_y_cont[sorted_indices], color='darkred', linestyle='--', 
+            label=f'Fit (R²={r_value_cont**2:.2f})')
+
+    ax[0,1].set_title('Contamination vs. Cluster Mass colored by Lifetime')
+    ax[0,1].set_xlabel('Cluster Mass (M☉)')
+    ax[0,1].set_ylabel('Contamination Fraction')
+    ax[0,1].legend()
+
+
+    
+
+    #---- Plot 3: Loss vs. Mass, color represents mass fraction
+
+    vmin, vmax = np.percentile(mass_fraction, [10, 90])
+
+    sc=ax[1,0].scatter(mass, loss, c=mass_fraction, cmap='viridis', norm=colors.Normalize(vmin=vmin, vmax=vmax), label='Loss Data', alpha=0.8)
+    fig.colorbar(sc,label='Mass Fraction (M_i - M_f / M_i)', ax=ax[1,0], orientation='vertical')
+
 
     # Create the points for the trendline
     # We calculate the y-values using the fit results on the log_mass
     trend_y_loss = slope_loss * log_mass + intercept_loss
     # Plot the trendline. We can sort the values to ensure the line is drawn correctly.
     sorted_indices = np.argsort(mass)
-    ax1.plot(mass[sorted_indices], trend_y_loss[sorted_indices], color='darkblue', linestyle='--', 
+    ax[1,0].plot(mass[sorted_indices], trend_y_loss[sorted_indices], color='darkblue', linestyle='--', 
             label=f'Fit (R²={r_value_loss**2:.2f})') # Add R-squared to the label
 
-    ax1.set_title('Loss vs. Cluster Mass')
-    ax1.set_xlabel('Cluster Mass (M☉)')
-    ax1.set_ylabel('Fraction')
-    ax1.legend()
+    ax[1,0].set_title('Loss vs. Cluster Mass')
+    ax[1,0].set_xlabel('Cluster Mass (M☉)')
+    ax[1,0].set_ylabel('Loss Fraction')
+    ax[1,0].legend()
 
 
-    # --- Plot 2: Contamination vs. Mass ---
-    ax2.scatter(mass, contamination, color='red', label='Contamination Data', alpha=0.5)
+    # --- Plot 2: Contamination vs. Mass, colored by mass fraction ---
+    sc=ax[1,1].scatter(mass, contamination, c=mass_fraction, cmap='viridis', norm=colors.Normalize(vmin=vmin, vmax=vmax), label='Contamination Data', alpha=0.8)
+    fig.colorbar(sc,label='Mass Fraction (M_i - M_f / M_i)', ax=ax[1,1], orientation='vertical')
 
     # Create the points for the trendline
     trend_y_cont = slope_cont * log_mass + intercept_cont
     # Plot the trendline
-    ax2.plot(mass[sorted_indices], trend_y_cont[sorted_indices], color='darkred', linestyle='--', 
+    ax[1,1].plot(mass[sorted_indices], trend_y_cont[sorted_indices], color='darkred', linestyle='--', 
             label=f'Fit (R²={r_value_cont**2:.2f})')
 
-    ax2.set_title('Contamination vs. Cluster Mass')
-    ax2.set_xlabel('Cluster Mass (M☉)')
-    ax2.legend()
+    ax[1,1].set_title('Contamination vs. Cluster Mass')
+    ax[1,1].set_xlabel('Cluster Mass (M☉)')#
+    ax[1,1].set_ylabel('Contamination Fraction')
+    ax[1,1].legend()
 
 
     # Apply common settings to both axes
-    for ax in [ax1, ax2]:
+    for ax in ax.flat:
         ax.set_xscale('log')
         ax.grid(True, linestyle='--', alpha=0.7)
         ax.set_ylim(0, 1.05)  # Set y-limits to [0, 1] for both plots
@@ -692,9 +803,7 @@ def loss_contamination_analysis(cluster_metrics, cluster_masses, contamination_a
 
 
 
-
-
-# Load CSV files
+# Load files
 cluster_metrics_chemdyn = np.load('/home/samuel_data/nihao_uhd_2.79e12_zoom_6_rerun_stars_all_snapshots_chemodynamical_tagging_S=auto/star_cluster_analysis_3/all_cluster_metrics.npy', allow_pickle=True).item()
 cluster_masses_chemdyn = np.load('/home/samuel_data/nihao_uhd_2.79e12_zoom_6_rerun_stars_all_snapshots_chemodynamical_tagging_S=auto/star_cluster_analysis_3/cluster_masses.npy', allow_pickle=True).item()
 cluster_metrics_dyn = np.load('/home/samuel_data/nihao_uhd_2.79e12_zoom_6_rerun_stars_all_snapshots_dynamical_tagging_S=auto/star_cluster_analysis_3/all_cluster_metrics.npy', allow_pickle=True).item()
@@ -724,33 +833,38 @@ dyn_dir = f"{dir}dynamical_tagging/"
 os.makedirs(dyn_dir, exist_ok=True)
 
 # # # Perform power law analysis for chemodynamical clusters
-# power_law_analysis_dir_chemdyn = f"{dir}chemodynamical_tagging/"
-# os.makedirs(power_law_analysis_dir_chemdyn, exist_ok=True)
-# n_snapshots = 201
-# power_law_analysis_many_clusters(power_law_analysis_dir_chemdyn, n_snapshots, cluster_masses_chemdyn)
+power_law_analysis_dir_chemdyn = f"{dir}chemodynamical_tagging/"
+os.makedirs(power_law_analysis_dir_chemdyn, exist_ok=True)
+n_snapshots = 201
+#power_law_analysis_many_clusters(power_law_analysis_dir_chemdyn, n_snapshots, cluster_masses_chemdyn)
 # power_law_analysis_few_clusters(power_law_analysis_dir_chemdyn, n_snapshots, star_forming_masses_chemdyn)
 
-# # Perform power law analysis for dynamical clusters
-# power_law_analysis_dir_dyn = f"{dir}dynamical_tagging/"
-# os.makedirs(power_law_analysis_dir_dyn, exist_ok=True)
-# n_snapshots = 201
-# #power_law_analysis_many_clusters(power_law_analysis_dir_dyn, n_snapshots, cluster_masses_dyn)
+# Perform power law analysis for dynamical clusters
+power_law_analysis_dir_dyn = f"{dir}dynamical_tagging/"
+os.makedirs(power_law_analysis_dir_dyn, exist_ok=True)
+n_snapshots = 201
+#power_law_analysis_many_clusters(power_law_analysis_dir_dyn, n_snapshots, cluster_masses_dyn)
 # power_law_analysis_few_clusters(power_law_analysis_dir_dyn, n_snapshots, star_forming_masses_dyn)
 
 
-#plot_cluster_mass_distribution(dir)
+plot_cluster_mass_distribution(dir)
 
-star_forming_vs_non_star_forming_age_distribution(chemdyn_dir, cluster_metrics_chemdyn)
-star_forming_vs_non_star_forming_age_distribution(dyn_dir, cluster_metrics_dyn)
+#star_forming_vs_non_star_forming_age_distribution(chemdyn_dir, cluster_metrics_chemdyn)
+#star_forming_vs_non_star_forming_age_distribution(dyn_dir, cluster_metrics_dyn)
 contamination_data_dir_chemdyn = "/home/samuel_data/nihao_uhd_2.79e12_zoom_6_rerun_stars_all_snapshots_chemodynamical_tagging_S=auto/star_cluster_analysis_3/burst_cluster_analysis/contamination_analysis/"
 contamination_data_dir_dyn = "/home/samuel_data/nihao_uhd_2.79e12_zoom_6_rerun_stars_all_snapshots_dynamical_tagging_S=auto/star_cluster_analysis_3/burst_cluster_analysis/contamination_analysis/"
 
 #loss_contamination_analysis(star_forming_clusters_chemdyn, star_forming_masses_chemdyn, contamination_data_dir_chemdyn, chemdyn_dir)
 #loss_contamination_analysis(star_forming_clusters_dyn, star_forming_masses_dyn, contamination_data_dir_dyn, dyn_dir)
 
+# dir1 = "/home/samuel_data/nihao_uhd_2.79e12_zoom_6_rerun_stars_all_snapshots_chemodynamical_tagging_S=auto/star_cluster_analysis_4/burst_cluster_analysis/lifetime_analysis/"
+# dir2 = "/home/samuel_data/nihao_uhd_2.79e12_zoom_6_rerun_stars_all_snapshots_dynamical_tagging_S=auto/star_cluster_analysis_4/burst_cluster_analysis/lifetime_analysis/"
 
+# chemodynamical_lifetime_data = pd.read_csv(f"{dir1}cluster_lifetimes.csv")
+# dynamical_lifetime_data = pd.read_csv(f"{dir2}cluster_lifetimes.csv")
 
-
+# median_test = stats.median_test(chemodynamical_lifetime_data['Lifetime (Gyr)'], dynamical_lifetime_data['Lifetime (Gyr)'])
+# print(f"Median test statistic: {median_test.statistic}, p-value: {median_test.pvalue}")
 
 
 
