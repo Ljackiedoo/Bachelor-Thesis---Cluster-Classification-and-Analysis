@@ -6,7 +6,8 @@
 
 # 3) Un-ignore (whitelist) your script files or script folders.
 #    Adjust these patterns to fit your filenames/extensions:
-
+!analysis.py
+!clustering.py
+!main.py
 # Or, if they’re loose .py files in the root:
-!*.py
-!*.txt
+
