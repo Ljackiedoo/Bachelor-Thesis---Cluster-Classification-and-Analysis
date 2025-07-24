@@ -48,7 +48,7 @@ tagging = 'chemodynamical'
 plot_labels = True
 
 # The minimum life-span of fuzzy clusters in Mega-years (default is 230 Myr)
-minLongevityOfFuzzyClusters = 10 
+minLongevityOfFuzzyClusters = 230 
 
 # Age of the Universe in Mega-years
 ageOfTheUniverse = 13800 
@@ -66,8 +66,8 @@ star_forming_threshold_fraction = 0.2
 
 # Set up the working directory
 galaxyFolderName = '2.79e12_zoom_6_rerun'
-workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_{tagging}_tagging_S={significance}_fuzzycat_100_myr/"
-#workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_{tagging}_tagging_S={significance}/"
+#workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_{tagging}_tagging_S={significance}_fuzzycat_100_myr/"
+workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_{tagging}_tagging_S={significance}/"
 simulationDirectoryPath = f"/home/_data/nihao/nihao_uhd/{galaxyFolderName}/"
 snapshotFilePrefix = '2.79e12.'
 
