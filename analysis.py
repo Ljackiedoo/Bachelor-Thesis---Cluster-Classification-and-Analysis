@@ -7,17 +7,21 @@ import seaborn as sns
 import matplotlib.ticker as ticker
 from scipy import stats
 import pynbody as pb
+import logging
 
 def starClusterAnalysis(snapshot_file_paths, working_directory_path, snapshots, snapshot_conversion_factor):
     # Create output directories
-    analysis_dir = f"{working_directory_path}star_cluster_analysis_5/"
+    analysis_dir = f"{working_directory_path}star_cluster_analysis/"
     os.makedirs(analysis_dir, exist_ok=True)
 
     star_data_dir = f"{analysis_dir}star_data/"
     os.makedirs(star_data_dir, exist_ok=True)
+
+    logging.info("Starting star cluster analysis...")
     
     # Load fuzzy cluster data
     print(f"Loading fuzzy cluster data from {working_directory_path}...")
+    logging.info(f"Loading fuzzy cluster data from {working_directory_path}...")
 
     clustered_ids = np.load(f"{working_directory_path}clusteredIDs.npy")
     print(f"clustered_ids shape: {clustered_ids.shape}")
@@ -31,6 +35,7 @@ def starClusterAnalysis(snapshot_file_paths, working_directory_path, snapshots, 
     n_snapshots = len(snapshot_file_paths)
     n_clusters = len(fuzzy_clusters)
     print(f"Processing {n_snapshots} snapshots for {n_clusters} fuzzy clusters")
+    logging.info(f"Processing {n_snapshots} snapshots for {n_clusters} fuzzy clusters")
 
     #------ load and save all star data for each snapshot from simulation (ids, ages, masses, positions)----------
     if not len(os.listdir(star_data_dir)) == n_snapshots:
@@ -38,9 +43,9 @@ def starClusterAnalysis(snapshot_file_paths, working_directory_path, snapshots, 
 
     #------ identify burst clusters from fuzzy clusters and save their metrics ----------
     if not os.path.exists(f"{analysis_dir}all_cluster_metrics.npy"):
-        get_cluster_data_2(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, n_snapshots, n_clusters, ordering, fuzzy_clusters, clustered_ids, snapshots, snapshot_conversion_factor)
+        get_cluster_data(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, n_snapshots, n_clusters, ordering, fuzzy_clusters, clustered_ids, snapshots, snapshot_conversion_factor)
     if not os.path.exists(f"{analysis_dir}cluster_masses.npy"):
-        get_cluster_masses_2(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, n_snapshots, n_clusters, ordering, fuzzy_clusters, clustered_ids, snapshots)
+        get_cluster_masses(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, n_snapshots, n_clusters, ordering, fuzzy_clusters, clustered_ids, snapshots)
 
     cluster_metrics = np.load(f"{analysis_dir}all_cluster_metrics.npy", allow_pickle=True).item()
     cluster_masses = np.load(f"{analysis_dir}cluster_masses.npy", allow_pickle=True).item()
@@ -48,224 +53,25 @@ def starClusterAnalysis(snapshot_file_paths, working_directory_path, snapshots, 
     #------Compare no. of burst clusters to no. of non-burst clusters----------
     age_distribution_analysis_dir = f"{analysis_dir}age_distribution_analysis/"
     os.makedirs(age_distribution_analysis_dir, exist_ok=True)
-    star_forming_vs_non_star_forming_age_distribution(age_distribution_analysis_dir, cluster_metrics)
+    #star_forming_vs_non_star_forming_age_distribution(age_distribution_analysis_dir, cluster_metrics)
 
 
     #------make plots for all fuzzy clusters---------
     fuzzy_cluster_analysis_dir = f"{analysis_dir}fuzzy_cluster_analysis/"
     os.makedirs(fuzzy_cluster_analysis_dir, exist_ok=True)
 
-    #fuzzy_cluster_analysis(analysis_dir, working_directory_path, n_snapshots, fuzzy_cluster_analysis_dir, star_data_dir, ordering, fuzzy_clusters, cluster_metrics, cluster_masses, snapshots, snapshot_conversion_factor)
+    fuzzy_cluster_analysis(analysis_dir, working_directory_path, n_snapshots, fuzzy_cluster_analysis_dir, star_data_dir, ordering, fuzzy_clusters, cluster_metrics, cluster_masses, snapshots, snapshot_conversion_factor)
 
     #------make plots for all burst clusters----------
     burst_cluster_analysis_dir = f"{analysis_dir}burst_cluster_analysis/"
     os.makedirs(burst_cluster_analysis_dir, exist_ok=True)
 
-    burst_cluster_analysis(analysis_dir, burst_cluster_analysis_dir, working_directory_path, n_snapshots, ordering, fuzzy_clusters, star_data_dir, cluster_metrics, cluster_masses, snapshots, snapshot_conversion_factor)
-
-def get_cluster_data(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, n_snapshots, n_clusters, ordering, fuzzy_clusters, clustered_ids, threshold_fraction = 0.2):
-    """
-    Load and save all data for the clusters in csv and numpy format."""
-
-    # ---- CSV file setup ----
-    csv_filepath = os.path.join(analysis_dir, "all_cluster_metrics.csv")
-    header_columns = ['cluster_idx', 
-                      'cluster_start_snapshot', 
-                      'cluster_end_snapshot', 
-                      'star_count', 
-                      'median_age', 
-                      'std_age', 
-                      'median_radial_distance', 
-                      'median_z_distance', 
-                      'median_iron', 
-                      'median_oxygen', 
-                      't25_t75', 
-                      'burst_snapshot', 
-                      'cluster_structure_age', 
-                      'burst_cluster']
-    processed_cluster_ids = set()
-
-    # Check if file exists and is non-empty
-    if os.path.exists(csv_filepath) and os.path.getsize(csv_filepath) > 0:
-        try:
-            df_existing = pd.read_csv(csv_filepath)
-            if 'cluster_idx' in df_existing.columns and not df_existing.empty:
-                processed_cluster_ids = set(df_existing['cluster_idx'].dropna().astype(int).unique())
-                print(f"Resuming. Found {len(processed_cluster_ids)} already processed cluster(s) in {csv_filepath}")
-            else:
-                print(f"File {csv_filepath} exists but is empty or missing 'cluster_idx' column.")
-        except pd.errors.EmptyDataError:
-            print(f"File {csv_filepath} exists but is unreadable as CSV.")
-    else:
-        # File doesn't exist or is empty – write header
-        pd.DataFrame(columns=header_columns).to_csv(csv_filepath, index=False)
-        print(f"Header written to {csv_filepath}")
-
-    clusterFileNames = np.load(f"{working_directory_path}clusterFileNames.npy")
-
-    #get the snapshot ranges for each fuzzycat cluster
-    fuzzy_cluster_snapshot_ranges = np.zeros((n_clusters, 2), dtype=int)
-    for cluster_idx, (start_idx, end_idx) in enumerate(fuzzy_clusters):
-        if cluster_idx in processed_cluster_ids:
-            print(f"Cluster {cluster_idx} already processed and in CSV. Skipping.")
-            continue
-
-        astrolink_cluster_ids_in_fuzzycat_cluster = ordering[start_idx:end_idx]
-        cluster_filenames = [clusterFileNames[idx] for idx in astrolink_cluster_ids_in_fuzzycat_cluster]
-        # Get the snapshot indices for this cluster
-        snapshot_indices = set([int(filename.split('_')[0]) for filename in cluster_filenames])
-        fuzzy_cluster_snapshot_ranges[cluster_idx] = [min(snapshot_indices), max(snapshot_indices)]
-
-        cluster_start_snapshot = fuzzy_cluster_snapshot_ranges[cluster_idx, 0]
-        cluster_end_snapshot = fuzzy_cluster_snapshot_ranges[cluster_idx, 1]
-
-        burst_recorded_for_this_cluster_idx_this_run = False
-
-
-        # Loop through each snapshot in the cluster's lifetime
-        for snap_idx in range(cluster_start_snapshot, cluster_start_snapshot + int(threshold_fraction*2000/13.8) + 1):
-            if snap_idx < 0 or snap_idx >= len(snapshot_file_paths):
-                continue
-            if burst_recorded_for_this_cluster_idx_this_run:
-            # If we found and recorded a burst for this cluster_idx in the current run, we stop checking further snapshots for this cluster_idx.
-                break
-            snapshot_path = snapshot_file_paths[snap_idx]
-            print(f"Processing snapshot {snap_idx}/{cluster_start_snapshot + int(threshold_fraction*2000/13.8) + 1}")
-            star_data = np.load(f"{star_data_dir}star_data_{snap_idx:03d}.npy")
-            star_ids = star_data[:,0]
-            star_ages = star_data[:,1]
-
-            member_ids = get_member_ids_for_fuzzycat_cluster(cluster_idx, ordering, fuzzy_clusters, working_directory_path, snap_idx)
-
-            if len(member_ids) == 0:
-                continue
-            
-            star_ages_in_cluster = star_ages[np.isin(star_ids, member_ids)]
-            
-
-            sorted_ages = np.sort(star_ages_in_cluster)
-
-            # Calculate t25-t75 (time to form middle 50% of stars)
-            t25 = np.percentile(sorted_ages, 25)
-            t75 = np.percentile(sorted_ages, 75)
-            t25_t75 = t75 - t25
-
-            median_age = np.median(star_ages_in_cluster)
-            std_age = np.std(star_ages_in_cluster)
-
-            cluster_structure_age = (snap_idx - cluster_start_snapshot)*13.8/2000
-
-            #Are we in snapshot range of cluster formation (ca. 1 Gyr after cluster start)?
-
-            if t25_t75 < threshold_fraction and len(star_ages_in_cluster) > 20:
-                star_positions = star_data[:,3:6]
-                star_irons = star_data[:,6]
-                star_oxygens = star_data[:,7]
-
-                star_positions_in_cluster = star_positions[np.isin(star_ids, member_ids)]
-                star_irons_in_cluster = star_irons[np.isin(star_ids, member_ids)]
-                star_oxygens_in_cluster = star_oxygens[np.isin(star_ids, member_ids)]
-
-                # Calculate metrics
-
-                radial_distances = np.linalg.norm(star_positions_in_cluster[:, :2], axis=1)
-                z_distances = np.abs(star_positions_in_cluster[:, 2])
-                median_radial = np.median(radial_distances)
-                median_z = np.median(z_distances)
-                median_iron = np.median(star_irons_in_cluster)
-                median_oxygen = np.median(star_oxygens_in_cluster)
-            
-              # Only consider clusters with median age < 1 Gyr
-                metrics = {
-                'cluster_idx': cluster_idx,
-                'cluster_start_snapshot': cluster_start_snapshot,
-                'cluster_end_snapshot': cluster_end_snapshot,
-                'star_count': len(star_ages_in_cluster),
-                'median_age': median_age,
-                'std_age': std_age,
-                'median_radial_distance':median_radial,
-                'median_z_distance': median_z,
-                'median_iron': median_iron,
-                'median_oxygen': median_oxygen,
-                't25_t75': t25_t75,
-                'burst_snapshot': snap_idx,
-                'cluster_structure_age': cluster_structure_age,
-                'burst_cluster': True
-                }
-                df_row = pd.DataFrame([metrics])
-                df_row.to_csv(csv_filepath, mode='a', header=False, index=False)
-                print(f"Found burst for cluster {cluster_idx} at snapshot {snap_idx}. Recording metrics.")
-                burst_recorded_for_this_cluster_idx_this_run = True
-
-
-        if not burst_recorded_for_this_cluster_idx_this_run:
-            # If we did not find a burst for this cluster_idx in the current run, we still want to record the metrics at the start snapshot
-            # This is important for non-star forming clusters to have a record of their metrics
-            print(f"No burst found for cluster {cluster_idx} in this run. Recording metrics at start snapshot {cluster_start_snapshot}.")
-            #For non-star forming clusters, we still want to record cluster metrics at the start snapshot
-            snap_idx = cluster_start_snapshot
-            snapshot_path = snapshot_file_paths[snap_idx]
-            print(f"Processing snapshot {snap_idx}/{len(snapshot_file_paths)} for non-star forming cluster {cluster_idx}")
-            star_data = np.load(f"{star_data_dir}star_data_{snap_idx:03d}.npy")
-            star_ids = star_data[:,0]
-            star_ages = star_data[:,1]
-            star_positions = star_data[:,3:6]
-            star_irons = star_data[:,6]
-            star_oxygens = star_data[:,7]
-
-            member_ids = get_member_ids_for_fuzzycat_cluster(cluster_idx, ordering, fuzzy_clusters, working_directory_path, snap_idx)
-
-            if len(member_ids) == 0:
-                continue
-            
-            star_ages_in_cluster = star_ages[np.isin(star_ids, member_ids)]
-            star_positions_in_cluster = star_positions[np.isin(star_ids, member_ids)]
-            star_irons_in_cluster = star_irons[np.isin(star_ids, member_ids)]
-            star_oxygens_in_cluster = star_oxygens[np.isin(star_ids, member_ids)]
-
-            # Calculate metrics
-
-            radial_distances = np.linalg.norm(star_positions_in_cluster[:, :2], axis=1)
-            z_distances = np.abs(star_positions_in_cluster[:, 2])
-            median_radial = np.median(radial_distances)
-            median_z = np.median(z_distances)
-            median_iron = np.median(star_irons_in_cluster)
-            median_oxygen = np.median(star_oxygens_in_cluster)
-
-            sorted_ages = np.sort(star_ages_in_cluster)
-            
-            # Calculate t25-t75 (time to form middle 50% of stars)
-            t25 = np.percentile(sorted_ages, 25)
-            t75 = np.percentile(sorted_ages, 75)
-            t25_t75 = t75 - t25
-            median_age = np.median(star_ages_in_cluster)
-            std_age = np.std(star_ages_in_cluster)
-
-            cluster_structure_age = (snap_idx - cluster_start_snapshot)*13.8/2000
-            
-            # Record the metrics for non-star forming clusters
-            metrics = {
-                'cluster_idx': cluster_idx,
-                'cluster_start_snapshot': cluster_start_snapshot,
-                'cluster_end_snapshot': cluster_end_snapshot,
-                'star_count': len(star_ages_in_cluster),
-                'median_age': median_age,
-                'std_age': std_age,
-                'median_radial_distance':median_radial,
-                'median_z_distance': median_z,
-                'median_iron': median_iron,
-                'median_oxygen': median_oxygen,
-                't25_t75': t25_t75,
-                'burst_snapshot': np.nan,
-                'cluster_structure_age': cluster_structure_age,
-                'burst_cluster': False
-            }
-            df_row = pd.DataFrame([metrics])
-            df_row.to_csv(csv_filepath, mode='a', header=False, index=False)
-    all_cluster_metrics = pd.read_csv(csv_filepath).set_index('cluster_idx').to_dict(orient='index')
-    np.save(f"{analysis_dir}all_cluster_metrics.npy", all_cluster_metrics, allow_pickle=True)
+    #burst_cluster_analysis(analysis_dir, burst_cluster_analysis_dir, working_directory_path, n_snapshots, ordering, fuzzy_clusters, star_data_dir, cluster_metrics, cluster_masses, snapshots, snapshot_conversion_factor)
 
 def calculate_cluster_metrics(star_data, member_ids, cluster_idx, snap_idx, cluster_start_snapshot, cluster_end_snapshot, snapshot_conversion_factor, is_burst):
+    """Calculate metrics for a cluster at a specific snapshot."""
+
+    logging.info(f"Calculating metrics for cluster {cluster_idx} at snapshot {snap_idx}...")
 
     is_member = np.isin(star_data[:, 0], member_ids)
     member_star_data = star_data[is_member]
@@ -309,10 +115,10 @@ def calculate_cluster_metrics(star_data, member_ids, cluster_idx, snap_idx, clus
     }       
     return metrics
 
-def get_cluster_data_2(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, n_snapshots, n_clusters, ordering, fuzzy_clusters, clustered_ids, available_snapshots, snapshot_conversion_factor, threshold_fraction = 0.2):
+def get_cluster_data(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, n_snapshots, n_clusters, ordering, fuzzy_clusters, clustered_ids, available_snapshots, snapshot_conversion_factor, threshold_fraction = 0.2):
     """
     Load and save all data for the clusters in csv and numpy format."""
-
+    logging.info("Starting cluster data extraction...")
     # ---- CSV file setup ----
     csv_filepath = os.path.join(analysis_dir, "all_cluster_metrics.csv")
     header_columns = ['cluster_idx', 
@@ -338,14 +144,18 @@ def get_cluster_data_2(snapshot_file_paths, working_directory_path, analysis_dir
             if 'cluster_idx' in df_existing.columns and not df_existing.empty:
                 processed_cluster_ids = set(df_existing['cluster_idx'].dropna().astype(int).unique())
                 print(f"Resuming. Found {len(processed_cluster_ids)} already processed cluster(s) in {csv_filepath}")
+                logging.info(f"Resuming. Found {len(processed_cluster_ids)} already processed cluster(s) in {csv_filepath}")
             else:
                 print(f"File {csv_filepath} exists but is empty or missing 'cluster_idx' column.")
+                logging.warning(f"File {csv_filepath} exists but is empty or missing 'cluster_idx' column.")
         except pd.errors.EmptyDataError:
             print(f"File {csv_filepath} exists but is unreadable as CSV.")
+            logging.error(f"File {csv_filepath} exists but is unreadable as CSV.")
     else:
         # File doesn't exist or is empty – write header
         pd.DataFrame(columns=header_columns).to_csv(csv_filepath, index=False)
         print(f"Header written to {csv_filepath}")
+        logging.info(f"Header written to {csv_filepath}")
 
     clusterFileNames = np.load(f"{working_directory_path}clusterFileNames.npy")
     # Pre-calculate snapshot ranges for each fuzzycat cluster
@@ -355,7 +165,7 @@ def get_cluster_data_2(snapshot_file_paths, working_directory_path, analysis_dir
     min_snapshot = np.min(fuzzy_cluster_snapshot_ranges[:, 0])
     max_snapshot = np.max(fuzzy_cluster_snapshot_ranges[:, 1])
 
-
+    logging.info("Preloading all star data for available snapshots...")
     all_star_data = {
         snap_idx: np.load(f"{star_data_dir}star_data_{snap_idx:03d}.npy") 
         for snap_idx in range(min_snapshot, max_snapshot + 1) if snap_idx in available_snapshots
@@ -366,6 +176,7 @@ def get_cluster_data_2(snapshot_file_paths, working_directory_path, analysis_dir
     for cluster_idx, (start_idx, end_idx) in enumerate(fuzzy_clusters):
         if cluster_idx in processed_cluster_ids:
             print(f"Cluster {cluster_idx} already processed and in CSV. Skipping.")
+            logging.info(f"Cluster {cluster_idx} already processed and in CSV. Skipping.")
             continue
 
         cluster_start_snapshot, cluster_end_snapshot = fuzzy_cluster_snapshot_ranges[cluster_idx]
@@ -393,11 +204,13 @@ def get_cluster_data_2(snapshot_file_paths, working_directory_path, analysis_dir
             
                 metrics = calculate_cluster_metrics(star_data, member_ids, cluster_idx, snap_idx, cluster_start_snapshot, cluster_end_snapshot, snapshot_conversion_factor, is_burst=True)
                 all_metrics.append(metrics)
-                print(f"Found burst for cluster {cluster_idx} at snapshot {snap_idx}. Recording metrics.") 
+                print(f"Found burst for cluster {cluster_idx} at snapshot {snap_idx}. Recording metrics.")
+                logging.info(f"Found burst for cluster {cluster_idx} at snapshot {snap_idx}. Recording metrics.") 
                 break
         else:
             # If no burst was found, record metrics at the start snapshot
             print(f"No burst found for cluster {cluster_idx} in this run. Recording metrics at start snapshot {cluster_start_snapshot}.")
+            logging.info(f"No burst found for cluster {cluster_idx} in this run. Recording metrics at start snapshot {cluster_start_snapshot}.")
             snap_idx = cluster_start_snapshot
             star_data = all_star_data.get(snap_idx)
             member_ids = get_member_ids_for_fuzzycat_cluster(cluster_idx, ordering, fuzzy_clusters, working_directory_path, snap_idx)
@@ -414,54 +227,12 @@ def get_cluster_data_2(snapshot_file_paths, working_directory_path, analysis_dir
     # Save all metrics to a numpy file
     all_cluster_metrics = pd.read_csv(csv_filepath).set_index('cluster_idx').to_dict(orient='index')
     np.save(f"{analysis_dir}all_cluster_metrics.npy", all_cluster_metrics, allow_pickle=True)
+    logging.info(f"All cluster metrics saved to {analysis_dir}all_cluster_metrics.npy")
 
-
-def get_cluster_masses(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, n_snapshots, n_clusters, ordering, fuzzy_clusters, clustered_ids):
+def get_cluster_masses(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, n_snapshots, n_clusters, ordering, fuzzy_clusters, clustered_ids, snapshots):
     """
     Load and save the masses of all clusters in a numpy file.
-    This function calculates the total mass of each cluster at each snapshot and saves it in a dictionary.
-    """
-    cluster_metrics = np.load(f"{analysis_dir}all_cluster_metrics.npy", allow_pickle=True).item()
-
-    cluster_masses = {}
-    for cluster_idx in cluster_metrics:
-        
-        if cluster_idx not in cluster_metrics:
-            print(f"Cluster {cluster_idx} not found in cluster metrics. Skipping.")
-            continue
-        
-        cluster_start_snapshot = cluster_metrics[cluster_idx]['cluster_start_snapshot']
-        cluster_end_snapshot = cluster_metrics[cluster_idx]['cluster_end_snapshot']
-        
-        # Initialize a dictionary to store the masses for each snapshot
-        cluster_masses[cluster_idx] = {}
-        
-        # Loop through each snapshot in the cluster's lifetime
-        for snap_idx in range(cluster_start_snapshot, cluster_end_snapshot + 1):
-            if snap_idx < 0 or snap_idx >= n_snapshots:
-                continue
-            snapshot_path = snapshot_file_paths[snap_idx]
-            print(f"Processing snapshot {snap_idx}/{n_snapshots} for cluster {cluster_idx}")
-            star_data = np.load(f"{star_data_dir}star_data_{snap_idx:03d}.npy")
-            star_ids = star_data[:, 0]
-            star_masses = star_data[:, 2]
-            
-            member_ids = get_member_ids_for_fuzzycat_cluster(cluster_idx, ordering, fuzzy_clusters, working_directory_path, snap_idx)
-            
-            if len(member_ids) == 0:
-                continue
-            
-            # Calculate the total mass of the cluster at this snapshot
-            star_masses_in_cluster = star_masses[np.isin(star_ids, member_ids)]
-            
-            # Store the total mass for this snapshot
-            cluster_masses[cluster_idx][snap_idx] = star_masses_in_cluster
-
-    np.save(f"{analysis_dir}cluster_masses.npy", cluster_masses, allow_pickle=True)
-def get_cluster_masses_2(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, n_snapshots, n_clusters, ordering, fuzzy_clusters, clustered_ids, snapshots):
-    """
-    Load and save the masses of all clusters in a numpy file.
-    This function calculates the total mass of each cluster at each snapshot and saves it in a dictionary.
+    This function calculates the total mass of each cluster at each snapshot and saves it in a dictionary and numpy file.
     """
     cluster_metrics = np.load(f"{analysis_dir}all_cluster_metrics.npy", allow_pickle=True).item()
 
@@ -474,7 +245,8 @@ def get_cluster_masses_2(snapshot_file_paths, working_directory_path, analysis_d
             snapshot_to_clusters[snap_idx].append(cluster_idx)
 
     for snap_idx in snapshots:
-        print(f"Processing snapshot {snap_idx}/{n_snapshots}")
+        print(f"Processing cluster masses for snapshot {snap_idx}/{n_snapshots}")
+        logging.info(f"Processing cluster masses for snapshot {snap_idx}/{n_snapshots}")
         star_data = np.load(f"{star_data_dir}star_data_{snap_idx:03d}.npy")
         star_mass_map = {int(row[0]): row[2] for row in star_data}
 
@@ -487,9 +259,13 @@ def get_cluster_masses_2(snapshot_file_paths, working_directory_path, analysis_d
             cluster_masses[cluster_idx][snap_idx] = np.array(star_masses_in_cluster)
 
     np.save(f"{analysis_dir}cluster_masses.npy", cluster_masses, allow_pickle=True)
+    logging.info(f"Cluster masses saved to {analysis_dir}cluster_masses.npy")
 
 def save_star_data(snapshot_file_paths, star_data_dir):
+    """Load and save all star data for each snapshot from simulation (ids, ages, masses, positions, chemical abundances)"""
+
     print("Saving star data for each snapshot...")
+    logging.info("Saving star data for each snapshot...")
     n_snapshots = len(snapshot_file_paths)
 
     #save star ages for faster access
@@ -498,6 +274,7 @@ def save_star_data(snapshot_file_paths, star_data_dir):
             continue
         snapshot_name = os.path.basename(snapshot_path)
         print(f"Processing snapshot {snap_idx+1}/{n_snapshots}: {snapshot_name}")
+        logging.info(f"Processing snapshot {snap_idx+1}/{n_snapshots}: {snapshot_name}")
         
         # Load the simulation data
         simulation = pb.load(snapshot_path)
@@ -529,28 +306,31 @@ def save_star_data(snapshot_file_paths, star_data_dir):
 def burst_cluster_analysis(analysis_dir, burst_cluster_analysis_dir, working_directory_path, n_snapshots, ordering, fuzzy_clusters, star_data_dir, cluster_metrics, cluster_masses, snapshots, snapshot_conversion_factor):
     """Analyze all burst clusters and make plots"""
 
+
     cluster_metrics = {k: v for k, v in cluster_metrics.items() if v['burst_cluster']}
     cluster_masses = {k: v for k, v in cluster_masses.items() if k in cluster_metrics}
+
+    logging.info(f"Starting analysis for burst clusters... Found {len(cluster_metrics)} burst clusters.")
 
     # #------Cluster Mass function-----
     power_law_analysis_dir = f"{burst_cluster_analysis_dir}power_law_analysis/"
     os.makedirs(power_law_analysis_dir, exist_ok=True)
-    #power_law_analysis_few_clusters(power_law_analysis_dir, n_snapshots, cluster_masses)
+    power_law_analysis_few_clusters(power_law_analysis_dir, n_snapshots, cluster_masses)
 
     # #------Lifetime distribution of clusters-----
     lifetime_analysis_dir = f"{burst_cluster_analysis_dir}lifetime_analysis/"
     os.makedirs(lifetime_analysis_dir, exist_ok=True)
-    #lifetime_analysis(cluster_metrics, cluster_masses, lifetime_analysis_dir, star_analysis=True)
+    lifetime_analysis(cluster_metrics, cluster_masses, lifetime_analysis_dir, star_analysis=True)
     
     # #------Position distribution of clusters-----
     spacial_distribution_analysis_dir = f"{burst_cluster_analysis_dir}spacial_distribution_analysis/"
     os.makedirs(spacial_distribution_analysis_dir, exist_ok=True)
-    #spacial_distribution_analysis(cluster_metrics, spacial_distribution_analysis_dir, star_forming=True)
+    spacial_distribution_analysis(cluster_metrics, spacial_distribution_analysis_dir, star_forming=True)
 
     #------Metallicity distribution of clusters-----
     metallicity_distribution_analysis_dir = f"{burst_cluster_analysis_dir}metallicity_distribution_analysis/"
     os.makedirs(metallicity_distribution_analysis_dir, exist_ok=True)
-    #metallicity_distribution_analysis(cluster_metrics, metallicity_distribution_analysis_dir, star_analysis=True)
+    metallicity_distribution_analysis(cluster_metrics, metallicity_distribution_analysis_dir, star_analysis=True)
 
     #------Contamination and Loss Analysis of Burst Clusters-----
     contamination_analysis_dir = f"{burst_cluster_analysis_dir}contamination_analysis/"
@@ -561,6 +341,8 @@ def burst_cluster_analysis(analysis_dir, burst_cluster_analysis_dir, working_dir
 
 def fuzzy_cluster_analysis(analysis_dir, working_directory_path, n_snapshots, fuzzy_cluster_analysis_dir, star_data_dir, ordering, fuzzy_clusters, cluster_metrics, cluster_masses, snapshots, snapshot_conversion_factor):
     """Analyze all fuzzy clusters and make plots"""
+
+    logging.info("Starting analysis for all fuzzy clusters...")
 
     # #------Cluster Mass function-----
     power_law_analysis_dir = f"{fuzzy_cluster_analysis_dir}power_law_analysis/"
@@ -651,7 +433,8 @@ def metallicity_distribution_analysis(cluster_data, dir, star_analysis=False):
     print(f"Saved cluster metallicity distribution plot to {dir}cluster_metallicity_distribution.png")
 
 def contamination_analysis(burst_clusters, cluster_masses, contamination_analysis_dir, workingDirectoryPath, ordering, fuzzy_clusters, star_data_dir, snapshots, snapshot_conversion_factor):
-
+    """Analyze the contamination and loss of burst clusters over time. Calculate both contamination and loss fractions for each cluster at each snapshot."""
+    logging.info("Starting contamination analysis for burst clusters...")
     birth_age_range = .100  # in Gyr, the age range for a star to be considered native to the cluster's formation events
     if not os.path.exists(f"{contamination_analysis_dir}burst_clusters_contamination_data.npy"):
         contamination_data = {
@@ -666,6 +449,7 @@ def contamination_analysis(burst_clusters, cluster_masses, contamination_analysi
 
         for snap_idx in snapshots:
             print(f"Processing snapshot {snap_idx} for contamination analysis...")
+            logging.info(f"Processing snapshot {snap_idx} for contamination analysis...")
             # Load star data for the current snapshot
             star_data = np.load(f"{star_data_dir}star_data_{snap_idx:03d}.npy")
 
@@ -700,6 +484,7 @@ def contamination_analysis(burst_clusters, cluster_masses, contamination_analysi
 
                 if contamination_fraction == 1.0 and loss_fraction == 0.0:
                     print(f"Cluster {cluster_idx} formed before simulation start, no in-situ information available")
+                    logging.info(f"Cluster {cluster_idx} formed before simulation start, no in-situ information available")
                     contamination_fraction = np.nan
                     loss_fraction = np.nan
 
@@ -711,81 +496,8 @@ def contamination_analysis(burst_clusters, cluster_masses, contamination_analysi
         # Save the final data structure to a file
         print("\nSaving contamination data...")
         np.save(f"{contamination_analysis_dir}burst_clusters_contamination_data.npy", contamination_data, allow_pickle=True)
+        logging.info(f"Contamination data saved to {contamination_analysis_dir}burst_clusters_contamination_data.npy")
 
-
-
-
-
-
-        # for cluster_idx in burst_clusters.keys():
-        # all_star_data = {
-        #     snap_idx: np.load(f"{star_data_dir}star_data_{snap_idx:03d}.npy") 
-        #     for snap_idx in snapshots
-        # }
-        # for cluster_idx, metrics in burst_clusters.items():
-        #     print(f"Analyzing cluster {cluster_idx} with dynamic native population...")
-            
-        #     start_snapshot = metrics['cluster_start_snapshot']
-        #     end_snapshot = metrics['cluster_end_snapshot']
-
-        #     # `native_member_ids`: All stars ever identified as belonging to this cluster's formation events.
-        #     native_member_ids = set()
-        #     #all_known_contaminants = set()
-
-        #     # Lists to store the results for each snapshot
-        #     snapshots_for_analysis = [snap_idx for snap_idx in snapshots if start_snapshot <= snap_idx <= end_snapshot]
-        #     contamination_fractions = []
-        #     loss_fractions = []
-
-        #     # Loop through cluster's lifetime
-        #     for snap_idx in snapshots_for_analysis:
-        #         print(f"  Processing snapshot {snap_idx} for cluster {cluster_idx}...")
-        #         #get the current member ids for this cluster at this snapshot
-        #         current_member_ids= get_member_ids_for_fuzzycat_cluster(
-        #                 cluster_idx, ordering, fuzzy_clusters, workingDirectoryPath, snap_idx
-        #             )
-        #         if not current_member_ids.any():
-        #             print(f"  No members found in snapshot {snap_idx} for cluster {cluster_idx}. Skipping...")
-        #             contamination_fractions.append(np.nan)
-        #             loss_fractions.append(np.nan)
-        #             continue
-
-        #         star_data = all_star_data[snap_idx]
-        #         current_member_mask = np.isin(star_data[:,0], current_member_ids)
-        #         current_member_ages = star_data[current_member_mask, 1]  # Get ages of current members
-
-        #         new_native_mask = (current_member_ages <= birth_age_range) & ~np.isin(star_data[current_member_mask,0], list(native_member_ids))
-        #         new_native_ids = star_data[current_member_mask, 0][new_native_mask]
-        #         native_member_ids.update(new_native_ids)
-
-        #         if not native_member_ids:
-        #             loss_fraction = 0
-        #         else:
-        #             # Calculate loss fraction: 1 - (number of native members in current snapshot / total native members)
-        #             loss_fraction = 1 - len(np.intersect1d(list(native_member_ids), current_member_ids)) / len(native_member_ids) 
-                
-        #         contamination_fraction = 1- len(np.intersect1d(current_member_ids, list(native_member_ids))) / len(current_member_ids)
-
-        #         if contamination_fraction == 1.0 and loss_fraction == 0.0:
-        #             print(f"Cluster {cluster_idx} formed before simulation start, no in-situ information available")
-        #             contamination_fractions.append(np.nan)
-        #             loss_fractions.append(np.nan)
-        #             continue
-
-        #         # Append the calculated fractions to the lists
-        #         contamination_fractions.append(contamination_fraction)
-        #         loss_fractions.append(loss_fraction)
-            
-        #     # # Store the complete data for this cluster
-        #     contamination_data[cluster_idx] = {
-        #         'snapshots': snapshots_for_analysis,
-        #         'contamination_fractions': contamination_fractions,
-        #         'loss_fractions': loss_fractions,
-        #     }
-
-        # # Save the final data structure to a file
-        # print("\nSaving contamination data...")
-        # np.save(f"{contamination_analysis_dir}burst_clusters_contamination_data.npy", contamination_data, allow_pickle=True)
     
     contamination_data = np.load(f"{contamination_analysis_dir}burst_clusters_contamination_data.npy", allow_pickle=True).item()
     dir = f"{contamination_analysis_dir}contamination/"

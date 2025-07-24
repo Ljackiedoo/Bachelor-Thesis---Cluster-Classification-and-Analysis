@@ -847,7 +847,7 @@ n_snapshots = 201
 # power_law_analysis_few_clusters(power_law_analysis_dir_dyn, n_snapshots, star_forming_masses_dyn)
 
 
-plot_cluster_mass_distribution(dir)
+#plot_cluster_mass_distribution(dir)
 
 #star_forming_vs_non_star_forming_age_distribution(chemdyn_dir, cluster_metrics_chemdyn)
 #star_forming_vs_non_star_forming_age_distribution(dyn_dir, cluster_metrics_dyn)
@@ -868,4 +868,5 @@ contamination_data_dir_dyn = "/home/samuel_data/nihao_uhd_2.79e12_zoom_6_rerun_s
 
 
 
-
+fuzzy_clusters = np.load('/home/samuel_data/nihao_uhd_2.79e12_zoom_6_rerun_stars_all_snapshots_chemodynamical_tagging_S=auto_fuzzycat_100_myr/fuzzyClusters.npy')
+print(f"Found {len(fuzzy_clusters)} fuzzy clusters in the dataset.")

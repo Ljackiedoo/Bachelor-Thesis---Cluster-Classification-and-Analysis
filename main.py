@@ -1,5 +1,4 @@
 from clustering import performClustering
-from clustering import makeMovieOfFuzzyClustersOverTime
 from analysis import starClusterAnalysis
 
 import os
@@ -7,6 +6,7 @@ import gc
 import glob
 import logging
 import warnings
+import sys
 
 import numpy as np
 import pynbody as pb
@@ -47,8 +47,8 @@ tagging = 'chemodynamical'
 # should plots have labels in the movie?
 plot_labels = True
 
-# The minimum life-span of fuzzy clusters in Mega-years
-minLongevityOfFuzzyClusters = 230 
+# The minimum life-span of fuzzy clusters in Mega-years (default is 230 Myr)
+minLongevityOfFuzzyClusters = 100 
 
 # Age of the Universe in Mega-years
 ageOfTheUniverse = 13800 
@@ -59,11 +59,11 @@ axisLimits = 100
 #plotting sample rate (every nth particle will be plotted)
 plotting_sample_rate = 2
 
+
 # Set up the working directory
 galaxyFolderName = '2.79e12_zoom_6_rerun'
-#workingDirectoryPath = f"C:/Users/power/OneDrive/_Studium/_Veranstaltungen/8. Semester/Bachelorarbeit/Backups/Programming_beautify/nihao_uhd{galaxyFolderName}_{particleName}_{snapshots}_snapshots_{tagging}_tagging_S={significance}/"
-workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_{tagging}_tagging_S={significance}/"
-simulationDirectoryPath = f"C:/Users/power/OneDrive/_Studium/_Veranstaltungen/8. Semester/Bachelorarbeit/Backups/Programming_beautify/{galaxyFolderName}/"
+workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_{tagging}_tagging_S={significance}_fuzzycat_100_myr/"
+#workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particleName}_{snapshots}_snapshots_{tagging}_tagging_S={significance}/"
 simulationDirectoryPath = f"/home/_data/nihao/nihao_uhd/{galaxyFolderName}/"
 snapshotFilePrefix = '2.79e12.'
 
@@ -81,23 +81,48 @@ if not os.path.exists(workingDirectoryPath):
     os.makedirs(f"{workingDirectoryPath}Clusters/")
     os.makedirs(f"{workingDirectoryPath}Cluster_plots/")
 
+# set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(f"{workingDirectoryPath}log.log"),
+        logging.StreamHandler()
+    ]
+)
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        # Call the default excepthook for KeyboardInterrupt
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+# Set the global exception handler
+sys.excepthook = handle_exception
+
+logging.info(f"Starting analysis for {particleName} particles in snapshots {first_snapshot} to {last_snapshot} (every {snapshot_frequency} snapshots) with tagging '{tagging}' and significance '{significance}'.")
 
 # perform the clustering and make movie of fuzzy clusters over time
-# performClustering(
-#     particleName=particleName,
-#     snapshots=snapshots,
-#     significance=significance,
-#     tagging=tagging,
-#     plot_labels=plot_labels,
-#     minLongevityOfFuzzyClusters=minLongevityOfFuzzyClusters,
-#     ageOfTheUniverse=ageOfTheUniverse,
-#     axisLimits=axisLimits,
-#     workingDirectoryPath=workingDirectoryPath,
-#     simulationDirectoryPath=simulationDirectoryPath,
-#     snapshotFilePaths=snapshotFilePaths
-# )
+performClustering(
+    particleName=particleName,
+    snapshots=snapshots,
+    significance=significance,
+    tagging=tagging,
+    plot_labels=plot_labels,
+    minLongevityOfFuzzyClusters=minLongevityOfFuzzyClusters,
+    ageOfTheUniverse=ageOfTheUniverse,
+    axisLimits=axisLimits,
+    workingDirectoryPath=workingDirectoryPath,
+    simulationDirectoryPath=simulationDirectoryPath,
+    snapshotFilePaths=snapshotFilePaths,
+    sample_rate=plotting_sample_rate
+)
 
+# Make plots for fuzzy and star forming clusters
 starClusterAnalysis(snapshotFilePaths, workingDirectoryPath, snapshots, snapshot_conversion_factor)
+
+logging.info(f"Star cluster analysis complete.")
 
 
 

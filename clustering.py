@@ -1,6 +1,16 @@
 import os
 import glob
-
+import logging
+import ffmpeg
+from astrolink import AstroLink
+from fuzzycat import FuzzyCat, FuzzyPlots
+from astrolink.io import loadAstroLinkObject
+from astrolink.io import saveAstroLinkObject
+import matplotlib.pyplot as plt
+import matplotlib.colors as col
+import gc
+import numpy as np
+import pynbody as pb
 
 def performClustering(
     particleName,
@@ -13,10 +23,11 @@ def performClustering(
     axisLimits,
     workingDirectoryPath,
     simulationDirectoryPath,
-    snapshotFilePaths
+    snapshotFilePaths,
+    sample_rate
 ):
     # Check if astrolink files are available
-    reuse_astrolink, astrolink_filepath = doAstrolinkFilesExist(workingDirectoryPath, snapshots, particleName, significance, tagging)
+    #reuse_astrolink, astrolink_filepath = doAstrolinkFilesExist(workingDirectoryPath, snapshots, particleName, significance, tagging)
     # Info for the clustering pipeline
     nSamples = len(snapshotFilePaths)
     # Calculate the minStability parameter so that fuzzy clusters live for at least `minLongevityOfFuzzyClusters` Myrs`
@@ -24,12 +35,13 @@ def performClustering(
 
     # Calculate movie frame rate so that 100 Myrs pass every second
     frameRate = 100*(snapshots.stop - 1)/(ageOfTheUniverse*snapshots.step)
+    frameRate = 24
 
     #Do clustering over snapshots with AstroLink
-    findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, particleName, nSamples, significance, reuse_astrolink, tagging, astrolink_filepath)
+    #findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, particleName, nSamples, significance, reuse_astrolink, tagging, astrolink_filepath)
 
     # Run FuzzyCat to find fuzzy clusters
-    runFuzzyCatOnClustersFromSnapshots(workingDirectoryPath, nSamples, minStability)
+    #runFuzzyCatOnClustersFromSnapshots(workingDirectoryPath, nSamples, minStability)
 
     makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate, plot_labels, tagging, sample_rate)
 
@@ -46,21 +58,24 @@ def doAstrolinkFilesExist(workingDirectoryPath, snapshots, particlename, signifi
     # Find directories that contain the Astrolink_objects folder
     dir_with_astrolink = ""
     rerun = False
-
+    logging.info(f"Checking for existing Astrolink directories")
     for dir_path in matching_dirs:
-        astrolink_path = os.path.join(dir_path, f"astrolink_objects_{particlename}_{tagging}/")
+        astrolink_path = os.path.join(dir_path, f"Astrolink_objects_{particlename}_{tagging}/")
         if os.path.exists(astrolink_path) and os.path.isdir(astrolink_path):
-            if len(os.listdir(astrolink_path)) == snapshots:
+            if len(os.listdir(astrolink_path)) == len(snapshots):
                 dir_with_astrolink = astrolink_path
                 rerun = True
+                logging.info(f"Found existing Astrolink directory at {dir_with_astrolink} with {len(os.listdir(astrolink_path))} snapshots.")
                 break
             else:
-                print(f"Found Astrolink directory with {len(os.listdir(astrolink_path))} snapshots, expected {snapshots + 1}")
+                print(f"Found Astrolink directory with {len(os.listdir(astrolink_path))} snapshots, expected {len(snapshots)}")
+                logging.warning(f"Found Astrolink directory with {len(os.listdir(astrolink_path))} snapshots, expected {len(snapshots)}.")
 
     if dir_with_astrolink == "":
         print("No other Astrolink directories found")
         dir_with_astrolink = f"{workingDirectoryPath}Astrolink_objects_{particlename}_{tagging}/"
         os.makedirs(dir_with_astrolink, exist_ok=True)
+        logging.info(f"Creating new Astrolink directory at {dir_with_astrolink}")
     
     return rerun, dir_with_astrolink
 
@@ -81,10 +96,11 @@ def findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, pa
     # Track cluster file names
     clusterFileNames = []
     
-
+    logging.info("Running AstroLink to find clusters in snapshots...")
     # Cycle through each snapshot, run AstroLink, and save the clusters
     for index, snapshotFilePath in enumerate(snapshotFilePaths):
         print(f"Loading {snapshotFilePath.split('/')[-1]}                                                         \t\t", end = '\r')
+        logging.info(f"Loading {snapshotFilePath.split('/')[-1]}                                                         \t\t")
         # Load the galaxy
         if(particleName == 'gas'):
             particleArr, particleIDs, weights, temperatures, _ = loadGalaxyAsArrays(snapshotFilePath, particleName)
@@ -93,6 +109,7 @@ def findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, pa
 
 
         print(f"Running AstroLink on the {particleName} particles of snapshot {snapshotFilePath.split('/')[-1]}   \t\t", end = '\r')
+        logging.info(f"Running AstroLink on the {particleName} particles of snapshot {snapshotFilePath.split('/')[-1]}   \t\t")
         # Run AstroLink for the first time
         if rerun == False:
             c = AstroLink(particleArr, workers=16, weights=weights, S = significance)          
@@ -129,6 +146,7 @@ def findAndSaveClustersFromSnapshots(snapshotFilePaths, workingDirectoryPath, pa
         cluster_iord = np.load(workingDirectoryPath + 'Clusters_iord/' + clusterFileName)
         cluster_reduced = np.where(np.isin(clusteredIDs, cluster_iord, assume_unique = True))[0].astype(cluster_iord.dtype)
         np.save(workingDirectoryPath + 'Clusters/' + clusterFileName, cluster_reduced)
+    logging.info(f"Astrolink done: Saved {len(clusterFileNames)} Astrolink clusters for {particleName} particles in {workingDirectoryPath}Clusters/")
 
 def loadGalaxyAsArrays(snapshotFilePath, particleName, tagging):
     """Returns the main halo data, from the simulation file `snapshotFilePath`,
@@ -162,7 +180,10 @@ def loadGalaxyAsArrays(snapshotFilePath, particleName, tagging):
         dyn_features = np.column_stack([mainHalo.stars[feature] for feature in featureSpaceNames])
         dyn_features -= centre  # Centre only dynamics
         if tagging == 'chemical':
-            featureSpace = np.column_stack([mainHalo.stars[feature] for feature in chemical_abundances])
+            featureSpace = np.column_stack([np.where(mainHalo.stars[feature] > 0, np.log10(mainHalo.stars[feature]), 0.0) for feature in chemical_abundances])
+            # remove rows where values are the same (not necessarily zero)
+            
+            
         elif tagging == 'chemodynamical':
             chem_features = np.column_stack([mainHalo.stars[feature] for feature in chemical_abundances])
             featureSpace = np.hstack([dyn_features, chem_features])
@@ -170,6 +191,9 @@ def loadGalaxyAsArrays(snapshotFilePath, particleName, tagging):
             featureSpace = dyn_features  # Just dynamics
         starsIDs = mainHalo.stars['iord']
         starMasses = np.array(mainHalo.stars['mass'])
+        starsIDs = starsIDs[~np.all(featureSpace == featureSpace[:, [0]], axis=1)]  # Remove rows where values are the same (not necessarily zero)
+        starMasses = starMasses[~np.all(featureSpace == featureSpace[:, [0]], axis=1)]  # Remove rows where values are the same (not necessarily zero)
+        featureSpace = featureSpace[~np.all(featureSpace == featureSpace[:, [0]], axis=1)]
         return featureSpace, starsIDs, starMasses, simulation
     if particleName == 'gas':
         gas = np.column_stack([mainHalo.gas[feature] for feature in featureSpaceNames])
@@ -227,20 +251,35 @@ def runFuzzyCatOnClustersFromSnapshots(workingDirectoryPath, nSamples, minStabil
     determined automatically from a file containing the IDs of clustered
     particles.
     """
-
+    logging.info("Running FuzzyCat on clusters from snapshots...")
     # Number of points clustered
     clusteredIDs = np.load(f"{workingDirectoryPath}clusteredIDs.npy")
     nPoints = clusteredIDs.size
     del clusteredIDs
-
     # Run FuzzyCat
     fc = FuzzyCat(nSamples, nPoints, workingDirectoryPath, minStability = minStability, checkpoint = True, verbose = 2)
     fc.run()
 
+
+    # fc = FuzzyCat(nSamples, nPoints, workingDirectoryPath, minStability = minStability, checkpoint = True, verbose = 2)
+    # fc.ordering = np.load(f"{workingDirectoryPath}ordering.npy")
+    # fc.groups= np.load(f"{workingDirectoryPath}groups.npy")
+    # fc.intraJaccardIndicesGroups = np.load(f"{workingDirectoryPath}intraJaccardIndicesGroups.npy")
+    # fc.interJaccardIndicesGroups = np.load(f"{workingDirectoryPath}interJaccardIndicesGroups.npy")
+    # fc.stabilitiesGroups = np.load(f"{workingDirectoryPath}stabilitiesGroups.npy")
+    # fc.jaccardIndices = np.load(f"{workingDirectoryPath}jaccardIndices.npy")
+    # clusterFileNames = np.load(f"{workingDirectoryPath}clusterFileNames.npy")
+    # fc.clusterFileNames = clusterFileNames
+    # fc._sampleNumbers = np.array([np.uint32(splitFileName[0]) for splitFileName in np.char.split(clusterFileNames, '_', 1)])
+    # fc.lazyLoader = [False for i in range(clusterFileNames.size)]
+    # fc.dataTypes = np.zeros(clusterFileNames.size, dtype = np.int8)
+
+    # fc.extractFuzzyClusters()
+
     # Plot the basic results
-    FuzzyPlots.plotOrderedJaccardIndex(fc)
-    FuzzyPlots.plotStabilities(fc)
-    FuzzyPlots.plotMemberships(fc)
+    # FuzzyPlots.plotOrderedJaccardIndex(fc)
+    # FuzzyPlots.plotStabilities(fc)
+    # FuzzyPlots.plotMemberships(fc)
 
     # Save outputs
     np.save(f"{workingDirectoryPath}jaccardIndices.npy", fc.jaccardIndices)
@@ -255,13 +294,18 @@ def runFuzzyCatOnClustersFromSnapshots(workingDirectoryPath, nSamples, minStabil
     np.save(f"{workingDirectoryPath}interJaccardIndicesGroups.npy", fc.interJaccardIndicesGroups)
     np.save(f"{workingDirectoryPath}stabilitiesGroups.npy", fc.stabilitiesGroups)
 
+    logging.info("FuzzyCat run complete. Results saved to working directory.")
 
-def makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate, plot_labels, tagging):
+
+def makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate, plot_labels, tagging, sample_rate):
     """Makes movies of the fuzzy clusters found by AstroLink and FuzzyCat as
     they evolve over time. For combined data, creates separate movies for each particle type.
     """
+
+    logging.info(f"Create Movies of Fuzzy Clusters over time with labels {plot_labels} and sample rate {sample_rate}...")
+
      # If we're working with combined stars and gas data, make separate movies for each
-    print("Loading cluster metadata for color consistency...")
+    #print("Loading cluster metadata for color consistency...")
     # Load cluster data once to identify all fuzzy cluster IDs
     clusterFileNames = np.load(workingDirectoryPath + 'clusterFileNames.npy')
     ordering = np.load(workingDirectoryPath + 'ordering.npy')
@@ -277,22 +321,29 @@ def makeMovieOfFuzzyClustersOverTime(snapshotFilePaths, workingDirectoryPath, pa
     
     # Create a fixed color mapping for all fuzzy cluster IDs
     # This ensures the same cluster gets the same color in both stars and gas visualizations
-    colourList = [f"C{i}" for i in range(10) if i != 7]  # Exclude C7 (gray)
+    # colourList = [f"C{i}" for i in range(10) if i != 7]  # Exclude C7 (gray)
+    # color_mapping = {cluster_id: colourList[i % len(colourList)] for i, cluster_id in enumerate(unique_fuzzy_ids)}
+
+    cmap = plt.get_cmap('tab20')
+    colourList = [cmap(i) for i in range(cmap.N)]  # cmap.N is 20
+
+    # Create the mapping
     color_mapping = {cluster_id: colourList[i % len(colourList)] for i, cluster_id in enumerate(unique_fuzzy_ids)}
 
     for particleType in particleName.split('_'):
 
         print(f"Creating movie for {particleType}...")
+        logging.info(f"Creating movie for {particleType}...")
         makeMovieOfFuzzyClustersOverTimeByParticleType(
-            snapshotFilePaths, workingDirectoryPath, particleType, axisLimits, frameRate, plot_labels, tagging, color_mapping,
+            snapshotFilePaths, workingDirectoryPath, particleType, axisLimits, frameRate, plot_labels, tagging, sample_rate, color_mapping
         )
 
-def makeMovieOfFuzzyClustersOverTimeByParticleType(snapshotFilePaths, workingDirectoryPath, particleType, axisLimits, frameRate, plot_labels, tagging, color_mapping = None):
+def makeMovieOfFuzzyClustersOverTimeByParticleType(snapshotFilePaths, workingDirectoryPath, particleName, axisLimits, frameRate, plot_labels, tagging, sample_rate, color_mapping):
     """Makes a movie of the fuzzy clusters for a specific particle type (stars or gas) found by AstroLink and FuzzyCat
     as they evolve over time. Optimized for performance.
     """
     # Prepare output path for this particle type
-    saveFileNameStem = f"{workingDirectoryPath}Cluster_plots/plotted_clusters_{particleType}_"
+    saveFileNameStem = f"{workingDirectoryPath}Cluster_plots/plotted_clusters_{particleName}_"
     
     # Ensure directory exists
     os.makedirs(os.path.dirname(saveFileNameStem), exist_ok=True)
@@ -309,48 +360,53 @@ def makeMovieOfFuzzyClustersOverTimeByParticleType(snapshotFilePaths, workingDir
         whichCluster[ordering[clst[0]:clst[1]]] = i
 
 
-    for index, snapshotFilePath in enumerate(snapshotFilePaths):
-        snapshotFileName = snapshotFilePath.split('/')[-1]
-        print(f"Loading {snapshotFileName}                                                         \t\t", end = '\r')
-        # Load the galaxy
+    # for index, snapshotFilePath in enumerate(snapshotFilePaths):
+    #     snapshotFileName = snapshotFilePath.split('/')[-1]
+    #     print(f"Loading {snapshotFileName}                                                         \t\t", end = '\r')
+    #     logging.info(f"Loading {snapshotFileName}                                                         \t\t")
+    #     # Load the galaxy
         
-        particleArr = loadGalaxyAsArrays(snapshotFilePath, particleName, tagging)[0]
+    #     particleArr = loadGalaxyAsArrays(snapshotFilePath, particleName, tagging)[0]
             
 
-        print(f"Loading clusters of {particleName} particles from snapshot {snapshotFileName}   \t\t", end = '\r')
-        # Load AstroLink clusters (found in this snapshot) that belong to the fuzzy clusters from FuzzyCat
-        clusters_raw, fuzzyLabels = [], []
-        for clusterFileName, whichFuzzyClst in zip(clusterFileNames, whichCluster):
-            clstSnapshot = int(clusterFileName.split('_')[0])
-            if whichFuzzyClst != -1 and clstSnapshot == index:
-                cluster_raw = np.load(workingDirectoryPath + 'Clusters_raw/' + clusterFileName)
-                clusters_raw.append(cluster_raw)
-                fuzzyLabels.append(whichFuzzyClst)
+    #     print(f"Loading clusters of {particleName} particles from snapshot {snapshotFileName}   \t\t", end = '\r')
+    #     logging.info(f"Loading clusters of {particleName} particles from snapshot {snapshotFileName}   \t\t")
+    #     # Load AstroLink clusters (found in this snapshot) that belong to the fuzzy clusters from FuzzyCat
+    #     clusters_raw, fuzzyLabels = [], []
+    #     for clusterFileName, whichFuzzyClst in zip(clusterFileNames, whichCluster):
+    #         clstSnapshot = int(clusterFileName.split('_')[0])
+    #         if whichFuzzyClst != -1 and clstSnapshot == index:
+    #             cluster_raw = np.load(workingDirectoryPath + 'Clusters_raw/' + clusterFileName)
+    #             clusters_raw.append(cluster_raw)
+    #             fuzzyLabels.append(whichFuzzyClst)
 
 
-        # Make plot of clusters
-        print(f"Plotting {len(clusters_raw)} astrolink {particleType} clusters for {snapshotFileName}")
-        paintLabelsOntoSnapshot(
-            particleArr, 
-            clusters_raw, 
-            fuzzyLabels, 
-            saveFileNameStem, 
-            snapshotFileName, 
-            axisLimits,
-            plot_labels,
-            color_mapping = color_mapping,
-        )
+    #     # Make plot of clusters
+    #     print(f"Plotting {len(clusters_raw)} astrolink {particleName} clusters for {snapshotFileName}")
+    #     logging.info(f"Plotting {len(clusters_raw)} Fuzzycat {particleName} clusters for {snapshotFileName}")
+    #     paintLabelsOntoSnapshot(
+    #         particleArr, 
+    #         clusters_raw, 
+    #         fuzzyLabels, 
+    #         saveFileNameStem, 
+    #         snapshotFileName, 
+    #         axisLimits,
+    #         plot_labels,
+    #         sample_rate = sample_rate,
+    #         color_mapping=color_mapping
+    #     )
 
     # Make movie
-    print(f"Creating movie for {particleType}...")
+    print(f"Creating movie for {particleName}...")
+    logging.info(f"Creating movie for {particleName}...")
     (
         ffmpeg
         .input(f"{saveFileNameStem}*.png", pattern_type='glob', framerate=frameRate)
-        .output(f"{workingDirectoryPath}{workingDirectoryPath.split('/')[-2]}_{particleType}_movie_without_labels.mp4")
+        .output(f"{workingDirectoryPath}{workingDirectoryPath.split('/')[-2]}_{particleName}_movie.mp4")
         .run()
     )
 
-def paintLabelsOntoSnapshot(particleArr, clusters_raw, labels, saveFileNameStem, snapshotFileName, axisLimits, plot_labels, sample_rate=2, withDiskZoomIn = True, color_mapping = None):
+def paintLabelsOntoSnapshot(particleArr, clusters_raw, labels, saveFileNameStem, snapshotFileName, axisLimits, plot_labels, sample_rate=2, withDiskZoomIn = True, color_mapping=None):
     """Creates a two-panel plot of the clusters within a snapshot. The left
     panel is a 3D scatter plot and the right panel is a top-down view of the
     region around the disk of the galaxy.
@@ -461,8 +517,8 @@ def paintLabelsOntoSnapshot(particleArr, clusters_raw, labels, saveFileNameStem,
             
             # Add the label text
             text = ax.text(centroid[0], centroid[1], centroid[2], f"{label}", 
-                color='white', fontsize=8, ha='center', va='center',
-                bbox=dict(facecolor='black', alpha=0.5, edgecolor='none', pad=2))
+                color='white', fontsize=6, ha='center', va='center',
+                bbox=dict(facecolor='black', alpha=0.2, edgecolor='none', pad=1))
             
             text.set_zorder(1000)
 
@@ -518,8 +574,8 @@ def paintLabelsOntoSnapshot(particleArr, clusters_raw, labels, saveFileNameStem,
                     
                     # Add the label text to 2D plot
                     text_2d = axDisk.text(centroid_2d[0], centroid_2d[1], f"{label}", 
-                        color='white', fontsize=8, ha='center', va='center',
-                        bbox=dict(facecolor='black', alpha=0.5, edgecolor='none', pad=2))
+                        color='white', fontsize=6, ha='center', va='center',
+                        bbox=dict(facecolor='black', alpha=0.2, edgecolor='none', pad=1))
                     
                     text_2d.set_zorder(1000)
 
