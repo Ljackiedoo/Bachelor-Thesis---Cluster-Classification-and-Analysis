@@ -48,7 +48,7 @@ tagging = 'chemodynamical'
 plot_labels = True
 
 # The minimum life-span of fuzzy clusters in Mega-years (default is 230 Myr)
-minLongevityOfFuzzyClusters = 100 
+minLongevityOfFuzzyClusters = 10 
 
 # Age of the Universe in Mega-years
 ageOfTheUniverse = 13800 
@@ -59,6 +59,10 @@ axisLimits = 100
 #plotting sample rate (every nth particle will be plotted)
 plotting_sample_rate = 2
 
+# Time threshold for a cluster to be considered star-forming (default is 0.2 Myr).
+# IQR of cluster ages must be less than this value to be considered star-forming.
+star_forming_threshold_fraction = 0.2
+
 
 # Set up the working directory
 galaxyFolderName = '2.79e12_zoom_6_rerun'
@@ -67,10 +71,10 @@ workingDirectoryPath = f"/home/samuel_data/nihao_uhd_{galaxyFolderName}_{particl
 simulationDirectoryPath = f"/home/_data/nihao/nihao_uhd/{galaxyFolderName}/"
 snapshotFilePrefix = '2.79e12.'
 
-snapshots = range(first_snapshot,last_snapshot + 1, snapshot_frequency)
-snapshotFilePaths = [f"{simulationDirectoryPath}{snapshotFilePrefix}{i:05}" for i in snapshots]
+real_snapshots = range(first_snapshot,last_snapshot + 1, snapshot_frequency)
+snapshotFilePaths = [f"{simulationDirectoryPath}{snapshotFilePrefix}{i:05}" for i in real_snapshots]
 
-snapshots = range(0,last_snapshot - first_snapshot + 1, snapshot_frequency)
+snapshots_from_0 = range(0,last_snapshot - first_snapshot + 1, snapshot_frequency)
 snapshot_conversion_factor = ageOfTheUniverse / total_snapshots_in_simulation  # Convert snapshot number to Mega-years
 
 
@@ -106,7 +110,8 @@ logging.info(f"Starting analysis for {particleName} particles in snapshots {firs
 # perform the clustering and make movie of fuzzy clusters over time
 performClustering(
     particleName=particleName,
-    snapshots=snapshots,
+    snapshots=snapshots_from_0,
+    real_snapshots=real_snapshots,
     significance=significance,
     tagging=tagging,
     plot_labels=plot_labels,
@@ -120,7 +125,7 @@ performClustering(
 )
 
 # Make plots for fuzzy and star forming clusters
-starClusterAnalysis(snapshotFilePaths, workingDirectoryPath, snapshots, snapshot_conversion_factor)
+starClusterAnalysis(snapshotFilePaths, workingDirectoryPath, snapshots, snapshot_conversion_factor, threshold_fraction = star_forming_threshold_fraction)
 
 logging.info(f"Star cluster analysis complete.")
 
