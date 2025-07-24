@@ -59,11 +59,16 @@ With window: 7h (Windowsize 110)
 
 
 
-Next steps:
+To do:
+Summary statistics of finding star-forming regions:
+- Histogram of mean age of star-forming clusters in detection snapshot
+- Histogram of IQR of star-forming clusters in detection snapshot to show peaking
 
 
 
+Incomplete durch physische auflösung -> nicht testbar entweder low mass incomplete, oer high mass overcomplete
+Probleme durch numerik/physik -> andere cluster mass function -> auf ander state ofg art anwenden oder completeness analysis of astrolink
 
-To download:
-- zoom 6 astrolink objects
-- Stars mixed cluster analysis plots and movies
+Balkenfarbe nach median radius kodieren
+
+
