@@ -870,3 +870,4 @@ contamination_data_dir_dyn = "/home/samuel_data/nihao_uhd_2.79e12_zoom_6_rerun_s
 
 fuzzy_clusters = np.load('/home/samuel_data/nihao_uhd_2.79e12_zoom_6_rerun_stars_all_snapshots_chemodynamical_tagging_S=auto_fuzzycat_100_myr/fuzzyClusters.npy')
 print(f"Found {len(fuzzy_clusters)} fuzzy clusters in the dataset.")
+
