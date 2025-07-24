@@ -9,7 +9,7 @@ from scipy import stats
 import pynbody as pb
 import logging
 
-def starClusterAnalysis(snapshot_file_paths, working_directory_path, snapshots, snapshot_conversion_factor):
+def starClusterAnalysis(snapshot_file_paths, working_directory_path, snapshots, snapshot_conversion_factor, star_forming_threshold_fraction):
     # Create output directories
     analysis_dir = f"{working_directory_path}star_cluster_analysis/"
     os.makedirs(analysis_dir, exist_ok=True)
@@ -43,7 +43,7 @@ def starClusterAnalysis(snapshot_file_paths, working_directory_path, snapshots, 
 
     #------ identify burst clusters from fuzzy clusters and save their metrics ----------
     if not os.path.exists(f"{analysis_dir}all_cluster_metrics.npy"):
-        get_cluster_data(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, n_snapshots, n_clusters, ordering, fuzzy_clusters, clustered_ids, snapshots, snapshot_conversion_factor)
+        get_cluster_data(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, n_snapshots, n_clusters, ordering, fuzzy_clusters, clustered_ids, snapshots, snapshot_conversion_factor, threshold_fraction=star_forming_threshold_fraction)
     if not os.path.exists(f"{analysis_dir}cluster_masses.npy"):
         get_cluster_masses(snapshot_file_paths, working_directory_path, analysis_dir, star_data_dir, n_snapshots, n_clusters, ordering, fuzzy_clusters, clustered_ids, snapshots)
 
