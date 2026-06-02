@@ -46,11 +46,12 @@ Once configured, simply run the main script:
 
 ```bash
 python main.py
+````
 
 **Output files**
 The script will generate a structured output directory containing:
 
-* /Clusters_raw/ & /Clusters_iord/: Raw .npy arrays of identified structures.
+* `/Clusters_raw/` & `/Clusters_iord/`: Raw .npy arrays of identified structures.
 
 * /Cluster_plots/: Frame-by-frame scatter plots of the galaxy disk and identified clusters.
 
