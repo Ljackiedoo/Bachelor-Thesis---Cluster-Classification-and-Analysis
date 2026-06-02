@@ -53,8 +53,8 @@ The script will generate a structured output directory containing:
 
 * `/Clusters_raw/` & `/Clusters_iord/`: Raw .npy arrays of identified structures.
 
-* /Cluster_plots/: Frame-by-frame scatter plots of the galaxy disk and identified clusters.
+* `/Cluster_plots/`: Frame-by-frame scatter plots of the galaxy disk and identified clusters.
 
-* /star_cluster_analysis/: .csv and .npy files containing median ages, metallicities, cluster masses, and contamination fractions.
+* `/star_cluster_analysis/`: .csv and .npy files containing median ages, metallicities, cluster masses, and contamination fractions.
 
-* .mp4: A compiled movie tracking the fuzzy clusters over the lifetime of the simulation.
+* `.mp4`: A compiled movie tracking the fuzzy clusters over the lifetime of the simulation.
