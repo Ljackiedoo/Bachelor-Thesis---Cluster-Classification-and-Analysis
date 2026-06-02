@@ -6,7 +6,7 @@
 
 [![Python Version](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://python.org)
 
-📄 **[Read the full Bachelor Thesis (PDF)](Samuel_Remmers_Bachelor_Thesis.pdf)**
+📄 **[Read the full Bachelor Thesis (PDF)](Samuel_Remmers_Bachelor_Thesis_2025.pdf)**
 
 </div>
 
