@@ -28,7 +28,3 @@ The formation and dissolution of stellar clusters are fundamental processes in g
   <img src="results/galaxy_animation.gif" alt="Simulation Plot" width="800"/>
   <p><i>Figure 1: Animation of clusters identified by applying AstroLink and FuzzyCat to the NIHAO-UHD 2.79e12 galaxy using chemodynamical tagging</i></p>
 </div>
-<div align="center">
-  <img src="results/galaxy_animation.gif" alt="Simulation Plot" width="800"/>
-  <p><i>Figure 1: Animation of clusters identified by applying AstroLink and FuzzyCat to the NIHAO-UHD 2.79e12 galaxy using chemodynamical tagging</i></p>
-</div>
