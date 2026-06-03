@@ -21,7 +21,7 @@ The formation and dissolution of stellar clusters are fundamental processes in g
 * **Result:** The chemodynamical approach proved vastly superior, identifying ~40% more clusters overall and doubling the detection rate of young, star-forming clusters in the disk. The pipeline also predicted a 4:1 ratio of native to pollution stars in a typical Milky Way-like cluster, providing a new baseline for observational studies.
 ---
 <div align="center">
-  <img src="/media/galaxy_animation.gif" alt="Simulation Plot" width="800"/>
+  <img src="media/galaxy_animation.gif" alt="Simulation Plot" width="800"/>
   <p><i>Figure 1: Animation of clusters identified by applying AstroLink and FuzzyCat to the NIHAO-UHD 2.79e12 galaxy using chemodynamical tagging</i></p>
 </div>
 ---
